@@ -1,0 +1,70 @@
+{
+  "schema_version": 1,
+  "packages": [
+    {
+      "name": "shadcn/ui",
+      "version": "CLI 4.21.3 registry snapshot",
+      "revision": "shadcn@4.21.3",
+      "source": "https://github.com/shadcn-ui/ui",
+      "license": "MIT",
+      "generator": {
+        "package": "shadcn",
+        "version": "4.21.3",
+        "resolved": "https://registry.npmjs.org/shadcn/-/shadcn-4.21.3.tgz",
+        "integrity": "sha512-r88yKaFvIwz2DInrE/DZn0XZVSuKWahouQVJBjYxVAcZ3GRkfh+3VDhIeCc18eYiIOuMgZoGaPYjhzhaON2mzw=="
+      },
+      "registry": "https://ui.shadcn.com/r/styles/new-york-v4/{component}.json",
+      "components": [
+        "alert",
+        "badge",
+        "button",
+        "card",
+        "dialog",
+        "input",
+        "label",
+        "progress",
+        "select",
+        "separator",
+        "slider",
+        "switch",
+        "tabs",
+        "toggle",
+        "toggle-group",
+        "tooltip"
+      ],
+      "note": "Generated from the official registry on 2026-10-06; registry responses are not claimed to be pinned to a Git commit. Copied component source is retained in desktop/ui/components/ui and subsequent local adaptations are documented in desktop/ui/README.md. The release build uses these retained sources and never reruns the registry generator.",
+      "texts": [
+        {
+          "path": "shadcn-LICENSE.txt",
+          "sha256": "1564074e13439397221ffd522e2e504d56561994a23d371aa5e3ad43e4f5423f"
+        }
+      ]
+    },
+    {
+      "name": "Mona Sans",
+      "version": "2.027",
+      "tag": "v2.0.27",
+      "revision": "0f7dc66ddd766605eb0e75c3f47bf9d1dd38ceca",
+      "source": "https://github.com/github/mona-sans",
+      "license": "OFL-1.1",
+      "asset": {
+        "path": "desktop/ui/assets/fonts/mona-sans.woff2",
+        "upstream_path": "fonts/webfonts/variable/MonaSansVF[wdth,wght,opsz,ital].woff2",
+        "sha256": "fd40288d051171b51e3d01f36790604470dbb4d4fc5b36ee5a8119f4f4c6b3e1",
+        "bytes": 532968,
+        "modified": false
+      },
+      "note": "Unmodified official variable WOFF2, locally bundled; only the filename was shortened. Both upstream LICENSE and OFL.txt copyright/license texts are preserved. Actual cmap has no Cyrillic; missing glyphs use the local CSS fallback font. No CDN runtime dependency.",
+      "texts": [
+        {
+          "path": "MonaSans-LICENSE.txt",
+          "sha256": "5a7816a9496347d78b9f9e6a702f07dcec3594b35a3d57f891854ba1d5cd7378"
+        },
+        {
+          "path": "MonaSans-OFL.txt",
+          "sha256": "9261dcb61fb5e3c587d50d7a9fdae12bc7422d8822d7ac06b8f34550479575de"
+        }
+      ]
+    }
+  ]
+}

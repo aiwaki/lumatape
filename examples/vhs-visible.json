@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "mode": "full",
+  "enabled": true,
+  "capture": {
+    "transfer": "compatibility"
+  },
+  "target": {
+    "kind": "window",
+    "window_title": "LumaTape test card"
+  },
+  "preset": "VHS Tape",
+  "effects": {
+    "intensity": 1,
+    "freeze_noise": false,
+    "noise_seed": 173
+  },
+  "aspect": {
+    "enabled": false,
+    "method": "mask",
+    "scale": "fit",
+    "source_dar": 0
+  },
+  "input_mode": "mouse-exact"
+}

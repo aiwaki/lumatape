@@ -1,0 +1,19 @@
+{
+  "crate": "selectors-0.36.1",
+  "repository": "https://github.com/servo/stylo",
+  "commit": "635e1a19d02960588a00e189bd4bd5bdb150ec3d",
+  "reason": "Published crate and repository omit full MPL text; canonical SPDX MPL-2.0 text accompanies the original crate source notice",
+  "sources": [
+    {
+      "file": "LICENSE-MPL-2.0.txt",
+      "url": "https://raw.githubusercontent.com/spdx/license-list-data/31ba1a50e5397e00a304dbadc76531740e89ee48/text/MPL-2.0.txt",
+      "sha256": "66a3107d5ad6a058aab753eaac2047ccb2ed0e39465dd0fe5844da3e300d5172"
+    },
+    {
+      "file": "COPYRIGHT-source.txt",
+      "url": "https://raw.githubusercontent.com/servo/stylo/635e1a19d02960588a00e189bd4bd5bdb150ec3d/selectors/lib.rs",
+      "description": "Original first five source lines plus source archive locator",
+      "sha256": "80fef52fb12774ba7fe17669978f2afc19785a90d2614db8c0a4255f453ad50c"
+    }
+  ]
+}

@@ -1,0 +1,75 @@
+name: Check
+on: [push, pull_request, workflow_dispatch]
+permissions:
+  contents: read
+jobs:
+  portable:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install signature verification dependency
+        run: python3 -m pip install cryptography
+      - run: sh scripts/check.sh
+      - name: Install locked frontend dependencies
+        run: npm --prefix desktop ci --ignore-scripts --no-audit --no-fund
+      - name: Build React frontend and collect runtime notices
+        run: |
+          npm --prefix desktop run build:ui
+          python3 desktop/scripts/npm-licenses.py --output build/frontend-licenses/npm
+      - name: Frontend state and IPC contract tests
+        run: npm --prefix desktop run test:ui
+      - name: Packaging, signed update admission and dependency license tests
+        run: |
+          python3 -m unittest discover -s scripts -p 'test_package_desktop.py'
+          python3 -m unittest discover -s scripts -p 'test_prepare_update.py'
+          python3 -m unittest discover -s desktop/scripts -p 'test_*licenses.py'
+  windows-build:
+    runs-on: windows-2022
+    env:
+      CARGO_BUILD_JOBS: '2'
+      LUMATAPE_WINDOWS_SDK: '10.0.26100.0'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - name: Install Rust toolchain
+        shell: pwsh
+        run: rustup toolchain install stable --profile minimal
+      - name: Read application version and list installed Windows SDKs
+        id: build-config
+        shell: pwsh
+        run: |
+          $version = (Get-Content desktop/src-tauri/tauri.conf.json -Raw | ConvertFrom-Json).version
+          if ($version -notmatch '^(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)\.(0|[1-9][0-9]*)$') { throw 'Expected stable X.Y.Z application version' }
+          "version=$version" >> $env:GITHUB_OUTPUT
+          $kits = Join-Path ${env:ProgramFiles(x86)} 'Windows Kits\10\Include'
+          Get-ChildItem -LiteralPath $kits -Directory | Select-Object Name, FullName | Format-Table -AutoSize
+          if (-not (Test-Path -LiteralPath (Join-Path $kits $env:LUMATAPE_WINDOWS_SDK) -PathType Container)) {
+            throw "The pinned Windows SDK $env:LUMATAPE_WINDOWS_SDK is not installed on this runner."
+          }
+      - name: Build native engine and Tauri; run unit and native ABI smoke
+        shell: pwsh
+        run: ./scripts/build-desktop.ps1 -Version '${{ steps.build-config.outputs.version }}' -WindowsSdkVersion $env:LUMATAPE_WINDOWS_SDK -Commit '${{ github.sha }}'
+      - name: Windows host and updater tests including native PE checks
+        shell: pwsh
+        run: cargo test --manifest-path desktop/src-tauri/Cargo.toml --locked
+      - uses: actions/upload-artifact@v4
+        with:
+          name: lumatape-windows-x64-unqualified
+          path: dist/

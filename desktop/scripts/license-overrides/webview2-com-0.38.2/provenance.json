@@ -1,0 +1,13 @@
+{
+  "crate": "webview2-com-0.38.2",
+  "repository": "https://github.com/wravery/webview2-rs",
+  "commit": "b74dc5e2b394044bea5191052868ce7a106c202c",
+  "reason": "Published crate omits the repository license texts",
+  "sources": [
+    {
+      "file": "LICENSE",
+      "url": "https://raw.githubusercontent.com/wravery/webview2-rs/b74dc5e2b394044bea5191052868ce7a106c202c/LICENSE",
+      "sha256": "0dcf41516e608bbcb6cdc5229feb7b86fe4a643b85e7df251133c93408fdac73"
+    }
+  ]
+}

@@ -1,0 +1,16 @@
+{
+  "name": "react-remove-scroll-bar",
+  "version": "2.3.8",
+  "metadata": "https://registry.npmjs.org/react-remove-scroll-bar/2.3.8",
+  "source_commit": "8ca9ba5ea52de03308fe8ced94f7b159a44d28ff",
+  "published_git_head": "b3b1287aad81def2e2ae707274b74531b61ddbaf",
+  "integrity": "sha512-9r+yi9+mgU33AKcj6IbT9oRCO78WriSj6t/cF8DWBZJ9aOGPOTEDvdUDz1FwKim7QXWwmHqtdHnRJfhAxEG46Q==",
+  "note": "npm 2.3.8 declares MIT but omits full LICENSE. Published gitHead was not available in the public repository on 2026-10-06; full MIT text is retained from the same official upstream repository at the separately pinned source_commit, not claimed to be the published source revision.",
+  "texts": [
+    {
+      "path": "LICENSE",
+      "url": "https://raw.githubusercontent.com/theKashey/react-remove-scroll-bar/8ca9ba5ea52de03308fe8ced94f7b159a44d28ff/LICENSE",
+      "sha256": "a79aae0c0f21990d9d963bb3c5a79cdcea9a46f8523ba55c58d7fe776b6ebc84"
+    }
+  ]
+}

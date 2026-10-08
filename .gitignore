@@ -1,0 +1,28 @@
+/build/
+/dist/
+/artifacts/
+*.exe
+*.dll
+*.pdb
+*.syso
+.DS_Store
+/desktop/node_modules/
+/desktop/dist/
+/desktop/src-tauri/target/
+/desktop/src-tauri/resources/engine/
+
+# Local development state and archived design experiments.
+__pycache__/
+*.py[cod]
+/desktop/src-tauri/gen/
+/desktop/src-tauri/resources/support/
+/desktop/air-styles/
+/desktop/prototypes/
+/docs/CURRENT_STATE.md
+
+# Signing material and local environment files never belong in releases.
+.env
+.env.*
+*.key
+*.pem
+*.p12

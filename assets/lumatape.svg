@@ -1,0 +1,6 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LumaTape rounded screen with a color stripe">
+  <title>LumaTape</title>
+  <rect x="4" y="8" width="56" height="48" rx="12" fill="#26BAB0"/>
+  <rect x="8" y="12" width="48" height="40" rx="8" fill="#132B3A"/>
+  <rect x="16" y="28" width="32" height="8" rx="4" fill="#F48572"/>
+</svg>
