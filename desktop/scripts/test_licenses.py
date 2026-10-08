@@ -1,8 +1,13 @@
 import hashlib
 import importlib.util
 import json
+import contextlib
+import io
+import subprocess
+import sys
 import tempfile
 import unittest
+from unittest import mock
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location("licenses", Path(__file__).with_name("licenses.py"))
@@ -11,6 +16,55 @@ spec.loader.exec_module(licenses)
 
 
 class LicenseCollectionTests(unittest.TestCase):
+    def test_cli_uses_utf8_when_windows_default_is_cp1252(self):
+        # Cargo emits UTF-8 even when Python's Windows text defaults are CP1252.
+        # Exercise a real subprocess decode and all collector file I/O under
+        # that default, with Unicode descriptions, paths and notice filenames.
+        real_run = subprocess.run
+        real_open = Path.open
+
+        def windows_open(path, mode="r", buffering=-1, encoding=None, errors=None, newline=None):
+            if "b" not in mode and encoding is None:
+                encoding = "cp1252"
+            return real_open(path, mode, buffering, encoding, errors, newline)
+
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp) / "сборка"
+            crate = root / "dependency"
+            crate.mkdir(parents=True)
+            manifest = root / "Cargo.toml"
+            manifest.write_bytes(b'[package]\nname="app"\nversion="1.0.0"\n')
+            manifest.with_name("Cargo.lock").write_bytes(b"locked fixture\n")
+            license_name = "LICENSE-ёж.txt"
+            notice = "MIT license — автор\n".encode("utf-8")
+            (crate / license_name).write_bytes(notice)
+            metadata = {
+                "packages": [
+                    {"id": "app", "name": "app", "version": "1", "manifest_path": str(manifest)},
+                    {"id": "dep", "name": "dep", "version": "1.0.0", "manifest_path": str(crate / "Cargo.toml"),
+                     "description": "Русский текст", "repository": "https://example.invalid/ёж", "license": "MIT"},
+                ],
+                "workspace_members": ["app"],
+                "resolve": {"nodes": [{"id": "app", "deps": [{"pkg": "dep"}]}]},
+            }
+            payload = json.dumps(metadata, ensure_ascii=False).encode("utf-8")
+
+            def cargo_metadata(command, **kwargs):
+                self.assertIn("--offline", command)
+                return real_run([sys.executable, "-c", f"import sys; sys.stdout.buffer.write({payload!r})"], **kwargs)
+
+            output = root / "лицензии"
+            with mock.patch.object(sys, "argv", ["licenses.py", "--manifest", str(manifest), "--output", str(output)]), \
+                 mock.patch.object(subprocess, "run", side_effect=cargo_metadata), \
+                 mock.patch.object(subprocess, "_text_encoding", return_value="cp1252"), \
+                 mock.patch.object(Path, "open", windows_open), contextlib.redirect_stdout(io.StringIO()):
+                licenses.main()
+            report = json.loads((output / "manifest.json").read_bytes())
+            self.assertEqual(report["missing_texts"], [])
+            self.assertEqual(report["packages"][0]["repository"], "https://example.invalid/ёж")
+            self.assertEqual((output / "dep-1.0.0" / license_name).read_bytes(), notice)
+            self.assertIn(license_name, (output / "THIRD-PARTY-NOTICES.txt").read_bytes().decode("utf-8"))
+
     def test_reachable_graph_keeps_dual_nested_texts_and_flags_missing(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)

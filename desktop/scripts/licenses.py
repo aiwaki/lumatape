@@ -68,8 +68,8 @@ def collect(metadata, destination, overrides=None):
         sources = [(path, root) for path in license_files(root, package.get("license_file"))]
         supplement = overrides / label
         if not sources and supplement.is_dir():
-            provenance = json.loads((supplement / "provenance.json").read_text())
-            vcs = json.loads((root / ".cargo_vcs_info.json").read_text())
+            provenance = json.loads((supplement / "provenance.json").read_text(encoding="utf-8"))
+            vcs = json.loads((root / ".cargo_vcs_info.json").read_text(encoding="utf-8"))
             if provenance["crate"] != label or provenance["commit"] != vcs["git"]["sha1"]:
                 raise ValueError(f"License supplement does not match published source: {label}")
             for item in provenance["sources"]:
@@ -81,7 +81,7 @@ def collect(metadata, destination, overrides=None):
                 sources.append((path, supplement))
             record["supplemental_provenance"] = provenance
             (destination / label).mkdir(parents=True, exist_ok=True)
-            (destination / label / "SOURCE-PROVENANCE.json").write_text(json.dumps(provenance, indent=2) + "\n")
+            (destination / label / "SOURCE-PROVENANCE.json").write_text(json.dumps(provenance, indent=2) + "\n", encoding="utf-8", newline="\n")
         for source, source_root in sources:
             relative = source.relative_to(source_root)
             data = source.read_bytes()
@@ -119,13 +119,13 @@ def main():
     run = subprocess.run([args.cargo, "metadata", "--manifest-path", str(args.manifest),
                           "--locked", "--offline", "--format-version", "1",
                           "--filter-platform", "x86_64-pc-windows-msvc"],
-                         text=True, capture_output=True)
+                         text=True, encoding="utf-8", capture_output=True)
     if run.returncode:
         raise SystemExit("Offline Cargo metadata failed; fetch/build locked dependencies first:\n" + run.stderr)
     args.output.mkdir(parents=True, exist_ok=True)
     report = collect(json.loads(run.stdout), args.output)
     report["cargo_lock_sha256"] = hashlib.sha256(args.manifest.with_name("Cargo.lock").read_bytes()).hexdigest()
-    (args.output / "manifest.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n")
+    (args.output / "manifest.json").write_text(json.dumps(report, indent=2, ensure_ascii=False) + "\n", encoding="utf-8", newline="\n")
     lines = ["LumaTape Rust dependency notices", "", "Full available license texts accompany this index.",
              "The SPDX declaration is not a replacement for the included license texts.", ""]
     for package in report["packages"]:
@@ -134,9 +134,9 @@ def main():
             lines.append("  Unmodified source: " + package["source_archive"])
         lines.extend("  " + t["path"] for t in package["texts"])
         lines.extend("  WARNING: " + warning for warning in package["warnings"])
-    (args.output / "THIRD-PARTY-NOTICES.txt").write_text("\n".join(lines) + "\n")
+    (args.output / "THIRD-PARTY-NOTICES.txt").write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(json.dumps({"packages": report["package_count"], "missing_texts": report["missing_texts"],
-                      "output": str(args.output)}, ensure_ascii=False))
+                      "output": str(args.output)}))
     if report["missing_texts"] and not args.allow_missing:
         raise SystemExit(1)
 
