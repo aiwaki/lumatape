@@ -15,7 +15,11 @@ import (
 func TestPointerStartupFailureDisablesAndPersistsWithoutClosingTray(t *testing.T) {
 	cfg := config.Default()
 	cfg.Mode, cfg.Target.Kind, cfg.Screen.Shape = "full", "window", config.ShapeConvex
+	cfg.Target.WindowTitle = "LumaTape startup test"
 	cfg.Enabled, cfg.Aspect.Enabled = true, true
+	if err := cfg.Validate(); err != nil {
+		t.Fatalf("invalid startup fixture: %v", err)
+	}
 	a := &application{cfg: cfg, directory: t.TempDir(), configPath: filepath.Join(t.TempDir(), "config.json"), tray: &win32.Tray{}}
 	p := presentation{Bounds: geometry.Rect{W: 960, H: 720}, Area: geometry.Rect{W: 960, H: 720}, SourceUV: geometry.UVRect{W: 1, H: 1}}
 	// The real Start path fails because the isolated directory has no companion.

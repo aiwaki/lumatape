@@ -15,6 +15,7 @@ func TestMissingSourcePrecedesFocusAndMonitorResolution(t *testing.T) {
 	for _, closed := range []bool{false, true} {
 		cfg := config.Default()
 		cfg.Target.Kind, cfg.Enabled = "window", true
+		cfg.Target.WindowTitle = "LumaTape source test"
 		a := &application{cfg: cfg, phase: "paused-settings", tray: &win32.Tray{}}
 		if closed {
 			// Invalid HWND: no messages or input are sent to another process.
@@ -40,6 +41,7 @@ func TestMissingSourcePrecedesFocusAndMonitorResolution(t *testing.T) {
 func TestDisabledEffectDoesNotAskForSource(t *testing.T) {
 	cfg := config.Default()
 	cfg.Target.Kind, cfg.Enabled, cfg.Aspect.Enabled = "window", false, false
+	cfg.Target.WindowTitle = "LumaTape source test"
 	a := &application{cfg: cfg}
 	if err := a.frame(); err != nil || a.phase != "disabled" {
 		t.Fatalf("disabled startup asked for a source: phase=%q err=%v", a.phase, err)
@@ -49,6 +51,7 @@ func TestDisabledEffectDoesNotAskForSource(t *testing.T) {
 func TestSuspendedFailurePrecedesMissingSource(t *testing.T) {
 	cfg := config.Default()
 	cfg.Target.Kind, cfg.Enabled = "window", true
+	cfg.Target.WindowTitle = "LumaTape source test"
 	a := &application{cfg: cfg, suspended: true, phase: "error"}
 	if err := a.frame(); err != nil || a.phase != "error" {
 		t.Fatalf("missing source masked a suspended failure: phase=%q err=%v", a.phase, err)
@@ -65,6 +68,7 @@ func TestMissingSourcePrecedesControllerForeground(t *testing.T) {
 	}
 	cfg := config.Default()
 	cfg.Target.Kind, cfg.Enabled = "window", true
+	cfg.Target.WindowTitle = "LumaTape source test"
 	a := &application{cfg: cfg, controllerPID: pid}
 	if err := a.frame(); err != nil || a.phase != "waiting-source" {
 		t.Fatalf("controller focus masked a missing source: phase=%q err=%v", a.phase, err)
