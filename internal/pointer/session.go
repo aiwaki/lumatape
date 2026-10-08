@@ -91,6 +91,12 @@ func Start(watchdogPath string) (*Session, error) {
 	cmd := exec.Command(watchdogPath, "--pointer-stdio")
 	configureProcess(cmd)
 	cmd.Stderr = os.Stderr
+	return startProcess(cmd, parent, 2*time.Second)
+}
+
+// startProcess keeps the real inherited-pipe and child-exit lifecycle testable
+// without initializing native cursor state in the test process.
+func startProcess(cmd *exec.Cmd, parent identity, readyTimeout time.Duration) (*Session, error) {
 	in, err := cmd.StdinPipe()
 	if err != nil {
 		return nil, err
@@ -105,17 +111,40 @@ func Start(watchdogPath string) (*Session, error) {
 		out.Close()
 		return nil, fmt.Errorf("start cursor worker: %w", err)
 	}
-	s := &Session{in: in, out: out, frames: make(chan request, 1), commands: make(chan request, 2), replies: make(chan response, 4), done: make(chan struct{}), processDone: make(chan struct{}), restorationConfirmed: true}
+	s := &Session{in: in, out: out, frames: make(chan request, 1), commands: make(chan request, 2), replies: make(chan response, 4), done: make(chan struct{}), processDone: make(chan struct{}), restorationConfirmed: true, startupStage: "waiting for worker initialization"}
 	go s.writeLoop()
 	go func() { s.readLoop(); _ = cmd.Wait(); close(s.processDone) }()
 	s.commands <- request{Command: "hello", Parent: parent}
-	if err = s.await("ready", 0); err != nil {
-		// A worker still initializing cannot acknowledge Stop. Latch the failed
-		// handshake before cleanup so it closes the pipe without another ACK wait.
+	if err = s.awaitFor("ready", 0, readyTimeout); err != nil {
 		s.fail(err)
-		return nil, s.Close() // includes the latched handshake and any cleanup failure
+		return nil, s.abortStartup(cmd, err)
 	}
 	return s, nil
+}
+
+func (s *Session) abortStartup(cmd *exec.Cmd, cause error) error {
+	// Start has not returned and no Frame has ever been sent. Initialization may
+	// be stuck inside a native call, but it cannot have suppressed the cursor.
+	// Unlike an armed worker, this child can be terminated safely. Leaving it
+	// behind could let it acquire projection ownership after the failed launch.
+	s.closed = true
+	_ = s.in.Close()
+	_ = s.out.Close()
+	select {
+	case <-s.processDone:
+		return cause
+	default:
+	}
+	killErr := cmd.Process.Kill()
+	select {
+	case <-s.processDone:
+		return cause
+	case <-time.After(time.Second):
+		if errors.Is(killErr, os.ErrProcessDone) {
+			killErr = nil
+		}
+		return errors.Join(cause, killErr, errors.New("cursor worker exit after cancelled startup is unconfirmed; no cursor frame was sent"))
+	}
 }
 
 func (s *Session) fail(err error) {

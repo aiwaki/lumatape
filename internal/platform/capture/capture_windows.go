@@ -67,7 +67,7 @@ func (l *Library) SupportsCompatibility() bool {
 
 func (l *Library) Open(hwnd uintptr, transfer Transfer) (*Capture, error) {
 	if !win32.CaptureSourceAllowed(hwnd) {
-		return nil, fmt.Errorf("capture source is unavailable or is a LumaTape helper window; select a game window")
+		return nil, fmt.Errorf("capture source is unavailable or is a Windows/LumaTape helper window; select a game window")
 	}
 	if transfer != TransferGPU && transfer != TransferCompatibility {
 		return nil, fmt.Errorf("unknown capture transfer %d", transfer)

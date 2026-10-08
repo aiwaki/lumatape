@@ -137,25 +137,26 @@ type Window struct {
 
 var windowResults []Window
 var windowCallback = syscall.NewCallback(func(h, data uintptr) uintptr {
-	if call("IsWindowVisible", h) == 0 || call("GetWindow", h, 4) != 0 || !CaptureSourceAllowed(h) {
-		return 1
-	}
+	w := captureWindowInfo(h)
+	w.visible = call("IsWindowVisible", h) != 0
+	w.owned = call("GetWindow", h, 4) != 0 // GW_OWNER
 	pid, _, _ := kernel32.NewProc("GetCurrentProcessId").Call()
-	var process uint32
-	call("GetWindowThreadProcessId", h, uintptr(unsafe.Pointer(&process)))
-	if uintptr(process) == pid {
+	w.currentProcessID = uint32(pid)
+	call("GetWindowThreadProcessId", h, uintptr(unsafe.Pointer(&w.processID)))
+	// GetWindowTextW sends WM_GETTEXT for same-process windows. Preserve the
+	// early rejection so listing sources never calls back into our own UI.
+	if !w.visible || w.owned || w.processID == w.currentProcessID {
 		return 1
 	}
 	var cloaked uint32
 	dwmapi.NewProc("DwmGetWindowAttribute").Call(h, 14, uintptr(unsafe.Pointer(&cloaked)), 4)
-	if cloaked != 0 {
-		return 1
-	}
+	w.cloaked = cloaked != 0
 	var title [512]uint16
-	if call("GetWindowTextW", h, uintptr(unsafe.Pointer(&title[0])), 512) == 0 {
-		return 1
+	call("GetWindowTextW", h, uintptr(unsafe.Pointer(&title[0])), uintptr(len(title)))
+	w.title = syscall.UTF16ToString(title[:])
+	if w.listed() {
+		windowResults = append(windowResults, Window{h, w.title, w.processID})
 	}
-	windowResults = append(windowResults, Window{h, syscall.UTF16ToString(title[:]), process})
 	return 1
 })
 

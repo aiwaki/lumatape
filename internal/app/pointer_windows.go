@@ -13,6 +13,13 @@ import (
 	"github.com/aiwaki/lumatape/internal/pointer"
 )
 
+// A failed Start has never sent a Frame, so even an initialization timeout
+// cannot leave this session responsible for hidden cursor state.
+type projectedPointerStartupError struct{ cause error }
+
+func (e *projectedPointerStartupError) Error() string { return e.cause.Error() }
+func (e *projectedPointerStartupError) Unwrap() error { return e.cause }
+
 func (a *application) updateProjectedPointer(p presentation, source geometry.Size, frameTime float64) error {
 	coordinates := ""
 	if a.shaderProgram != nil {
@@ -25,7 +32,13 @@ func (a *application) updateProjectedPointer(p presentation, source geometry.Siz
 	if a.pointerSession == nil {
 		session, err := pointer.Start(filepath.Join(a.directory, "lumatape-watchdog.exe"))
 		if err != nil {
-			return fmt.Errorf(locale.Text("подготовка курсора для выпуклого экрана: %w", "preparing cursor for the convex screen: %w"), err)
+			cause := fmt.Errorf(locale.Text("подготовка курсора для выпуклого экрана: %w", "preparing cursor for the convex screen: %w"), err)
+			if a.snapshotPath != "" {
+				return cause // an explicit image qualification must still fail
+			}
+			a.pointerFailure = &projectedPointerStartupError{cause}
+			a.hide()
+			return nil // persist OFF and recover at the normal frame boundary
 		}
 		a.pointerSession = session
 		a.record("pointer_worker_ready", nil)
@@ -107,12 +120,19 @@ func (a *application) recoverProjectedPointerAtBoundary() error {
 // for choosing another screen shape, and never replay the failed effect on launch.
 func (a *application) recoverProjectedPointer(cause error) error {
 	session := a.pointerSession
+	var closeErr error
+	var confirmed bool
 	if session == nil {
-		return errors.Join(cause, errors.New(locale.Text("сеанс восстановления системного курсора недоступен", "system cursor recovery session is unavailable")))
+		var startup *projectedPointerStartupError
+		if !errors.As(cause, &startup) {
+			return errors.Join(cause, errors.New(locale.Text("сеанс восстановления системного курсора недоступен", "system cursor recovery session is unavailable")))
+		}
+		confirmed = true // Start never returned a session that could receive Frame
+	} else {
+		closeErr = session.Close()
+		confirmed = session.RestorationConfirmed()
 	}
 	a.pointerEngaged = false
-	closeErr := session.Close()
-	confirmed := session.RestorationConfirmed()
 	a.pointerSession = nil
 	a.hide()
 	a.cfg.Enabled, a.cfg.Aspect.Enabled = false, false

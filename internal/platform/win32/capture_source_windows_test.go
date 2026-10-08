@@ -13,7 +13,7 @@ import (
 	"github.com/aiwaki/lumatape/internal/platform/win32"
 )
 
-func TestPointerSurfaceCannotBeCapturedRegardlessOfTitle(t *testing.T) {
+func TestServiceSurfaceCannotBeCapturedRegardlessOfTitle(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 	user := syscall.NewLazyDLL("user32.dll")
@@ -27,48 +27,69 @@ func TestPointerSurfaceCannotBeCapturedRegardlessOfTitle(t *testing.T) {
 		Menu, Class                        *uint16
 		SmallIcon                          uintptr
 	}
-	cls.Size, cls.Instance, cls.Class = uint32(unsafe.Sizeof(cls)), instance, win32.U16("LumaTape.PointerProjection")
+	cls.Size, cls.Instance = uint32(unsafe.Sizeof(cls)), instance
 	cls.Proc = syscall.NewCallback(func(h uintptr, msg uint32, w, l uintptr) uintptr {
 		result, _, _ := user.NewProc("DefWindowProcW").Call(h, uintptr(msg), w, l)
 		return result
 	})
-	if atom, _, err := user.NewProc("RegisterClassExW").Call(uintptr(unsafe.Pointer(&cls))); atom == 0 {
-		t.Fatalf("register native fixture: %v", err)
+	serviceClasses := []string{
+		"LumaTape.PointerProjection", "LumaTape.Control", "LumaTape.Settings",
+		"Progman", "WorkerW", "Shell_TrayWnd", "Shell_SecondaryTrayWnd",
+		"NotifyIconOverflowWindow", "TopLevelWindowForOverflowXamlIsland",
 	}
-	defer user.NewProc("UnregisterClassW").Call(uintptr(unsafe.Pointer(cls.Class)), instance)
+	for _, class := range serviceClasses {
+		cls.Class = win32.U16(class)
+		if atom, _, err := user.NewProc("RegisterClassExW").Call(uintptr(unsafe.Pointer(&cls))); atom == 0 {
+			t.Fatalf("register %s native fixture: %v", class, err)
+		}
+		defer user.NewProc("UnregisterClassW").Call(uintptr(unsafe.Pointer(cls.Class)), instance)
+	}
 	var windows []uintptr
 	defer func() {
 		for _, hwnd := range windows {
 			user.NewProc("DestroyWindow").Call(hwnd)
 		}
 	}()
-	create := func(class, title string) uintptr {
+	create := func(class, title string, extendedStyle uintptr) uintptr {
 		t.Helper()
 		// Hidden native windows are enough to test the capture boundary. No
 		// focus, cursor visibility, magnification or input state is changed.
-		hwnd, _, err := user.NewProc("CreateWindowExW").Call(0, uintptr(unsafe.Pointer(win32.U16(class))), uintptr(unsafe.Pointer(win32.U16(title))), 0x80000000, 0, 0, 1, 1, 0, 0, instance, 0)
+		hwnd, _, err := user.NewProc("CreateWindowExW").Call(extendedStyle, uintptr(unsafe.Pointer(win32.U16(class))), uintptr(unsafe.Pointer(win32.U16(title))), 0x80000000, 0, 0, 1, 1, 0, 0, instance, 0)
 		if hwnd == 0 {
 			t.Fatalf("create %s fixture: %v", class, err)
 		}
 		windows = append(windows, hwnd)
 		return hwnd
 	}
-	// Selection must use the class identity, not a translated/renamed title.
-	pointer := create("LumaTape.PointerProjection", "Renamed helper")
-	if win32.CaptureSourceAllowed(pointer) {
-		t.Fatal("projection surface accepted as a capture source")
-	}
-	for _, transfer := range []capture.Transfer{capture.TransferGPU, capture.TransferCompatibility} {
-		// A nil library proves the rejection happens before any capture DLL
-		// entry point (including CPU capability checks) can be touched.
-		var library *capture.Library
-		if opened, err := library.Open(pointer, transfer); opened != nil || err == nil || !strings.Contains(err.Error(), "helper window") {
-			t.Fatalf("capture boundary accepted projection surface: %v %v", opened, err)
+	reject := func(hwnd uintptr) {
+		t.Helper()
+		if win32.CaptureSourceAllowed(hwnd) {
+			t.Fatal("service surface accepted as a capture source")
+		}
+		for _, transfer := range []capture.Transfer{capture.TransferGPU, capture.TransferCompatibility} {
+			// A nil library proves the rejection happens before any capture DLL
+			// entry point (including CPU capability checks) can be touched.
+			var library *capture.Library
+			if opened, err := library.Open(hwnd, transfer); opened != nil || err == nil || !strings.Contains(err.Error(), "helper window") {
+				t.Fatalf("capture boundary accepted service surface: %v %v", opened, err)
+			}
 		}
 	}
-	for _, title := range []string{"LumaTape pointer", "LumaTape testcard", "LumaTape preview", "Ordinary game"} {
-		if !win32.CaptureSourceAllowed(create("STATIC", title)) {
+	// Selection must use the class identity, not a translated/renamed title.
+	for _, class := range serviceClasses {
+		reject(create(class, "Renamed helper", 0))
+	}
+	for _, extendedStyle := range []uintptr{0x80, 0x08000000, 0x080800a0} {
+		reject(create("STATIC", "Ordinary game", extendedStyle))
+	}
+	for _, title := range []string{"", "Program Manager", "System tray overflow window.", "LumaTape pointer", "LumaTape testcard", "LumaTape preview", "Ordinary game"} {
+		if !win32.CaptureSourceAllowed(create("STATIC", title, 0)) {
 			t.Fatalf("ordinary source excluded by title %q", title)
+		}
+	}
+	for _, proc := range []string{"GetShellWindow", "GetDesktopWindow"} {
+		if hwnd, _, _ := user.NewProc(proc).Call(); hwnd != 0 {
+			reject(hwnd)
 		}
 	}
 	if win32.CaptureSourceAllowed(0) {

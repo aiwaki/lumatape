@@ -1728,6 +1728,36 @@ mod tests {
     }
 
     #[test]
+    fn enabled_request_without_source_waits_and_can_be_cancelled() {
+        for language in [crate::i18n::Language::Ru, crate::i18n::Language::En] {
+            crate::i18n::with_language(language, || {
+                let (mut snapshot, mut sources, shaders) = fixture();
+                snapshot["config"]["enabled"] = json!(true);
+                snapshot["runtime"]["enabled"] = json!(true);
+                snapshot["runtime"]["phase"] = json!("waiting-source");
+                snapshot["source"] = Value::Null;
+                sources["windows"] = json!([]);
+
+                let menu = build(&snapshot, &sources, &shaders).unwrap();
+                assert_eq!(
+                    menu.status,
+                    text("Ожидает окно игры", "Waiting for game window")
+                );
+                assert!(menu.sources.is_empty());
+                assert!(menu.wants_off);
+                assert!(menu.power.enabled);
+                assert_eq!(menu.power.label, text("Выключить", "Turn off"));
+
+                let power = parse_action(&menu.power.id).unwrap();
+                let mutation = plan(&power, &snapshot, &sources, &shaders).unwrap();
+                assert_eq!(mutation.kind, "emergency");
+                assert_eq!(mutation.payload, Value::Null);
+                assert_eq!(snapshot["config"]["enabled"], true);
+            });
+        }
+    }
+
+    #[test]
     fn active_label_requires_a_visible_effect_not_just_an_enabled_request() {
         for language in [crate::i18n::Language::Ru, crate::i18n::Language::En] {
             crate::i18n::with_language(language, || {

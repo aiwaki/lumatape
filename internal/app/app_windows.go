@@ -771,6 +771,25 @@ func (a *application) frame() error {
 		}
 		return a.closeCapture()
 	}
+	// A missing source takes precedence over tray focus: there is no game
+	// to return to. Close any stale capture before presenting a pause status.
+	if a.cfg.Target.Kind == "window" {
+		if a.target.Handle == 0 {
+			a.hide()
+			a.setPhase("waiting-source", locale.Text("Выберите открытое окно источника", "Select an open source window"))
+			return a.closeCapture()
+		}
+		if !win32.SameProcess(a.target.Handle, a.target.PID) {
+			a.hide()
+			if e := a.closeCapture(); e != nil {
+				return e
+			}
+			a.target = win32.Window{}
+			a.setPhase("waiting-source", locale.Text("Источник закрыт; выберите новое окно", "Source closed; select a new window"))
+			a.issue(locale.Text("Источник закрыт", "Source closed"), locale.Text("Выберите новое окно в трее.", "Select a new window in the tray."))
+			return nil
+		}
+	}
 	if a.controllerPID != 0 && win32.SameProcess(win32.Foreground(), a.controllerPID) {
 		a.hide()
 		a.setPhase("paused-settings", locale.Text("Открыты настройки LumaTape; вернитесь в игру, чтобы увидеть эффект", "LumaTape settings are open; return to the game to see the effect"))
@@ -790,21 +809,6 @@ func (a *application) frame() error {
 	}
 	source := m.Bounds
 	if a.cfg.Target.Kind == "window" {
-		if a.target.Handle == 0 {
-			a.hide()
-			a.setPhase("waiting-source", locale.Text("Выберите открытое окно источника", "Select an open source window"))
-			return nil
-		}
-		if !win32.SameProcess(a.target.Handle, a.target.PID) {
-			a.hide()
-			if e := a.closeCapture(); e != nil {
-				return e
-			}
-			a.target = win32.Window{}
-			a.setPhase("waiting-source", locale.Text("Источник закрыт; выберите новое окно", "Source closed; select a new window"))
-			a.issue(locale.Text("Источник закрыт", "Source closed"), locale.Text("Выберите новое окно в трее.", "Select a new window in the tray."))
-			return nil
-		}
 		if !win32.Visible(a.target.Handle) || win32.Foreground() != a.target.Handle {
 			a.hide()
 			a.setPhase("paused-focus", locale.Text("Вернитесь в окно игры, чтобы увидеть эффект", "Return to the game window to see the effect"))

@@ -28,7 +28,7 @@ func (a *application) findTarget(next config.Config, selected []win32.Window) (w
 			return win32.Window{}, fmt.Errorf(locale.Text("выбранное окно закрыто", "the selected window has closed"))
 		}
 		if !win32.CaptureSourceAllowed(w.Handle) {
-			return win32.Window{}, fmt.Errorf(locale.Text("служебное окно LumaTape нельзя выбрать источником; выберите окно игры", "a LumaTape service window cannot be a capture source; select a game window"))
+			return win32.Window{}, fmt.Errorf(locale.Text("служебное окно Windows или LumaTape нельзя выбрать источником; выберите окно игры", "a Windows or LumaTape helper window cannot be a capture source; select a game window"))
 		}
 		return w, nil
 	}

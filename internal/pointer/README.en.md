@@ -35,6 +35,9 @@ that queued hide until it resumes, but cursor restoration does not wait for it.
 hold one named ownership mutex through restoration and runtime teardown, and
 recovery uses that same gate. Closing waits for confirmed child exit before a
 fallback show call; it never kills a worker that might still owe restoration.
+If startup fails before the first `Frame`, the child can be safely terminated
+because it cannot have hidden the cursor. This path separately confirms child
+exit so a stalled startup cannot retain projection ownership during a retry.
 Coexistence with another application's cursor-hiding/magnification tool has not
 been tested. Recovery is not guaranteed if both the engine and companion are killed.
 
