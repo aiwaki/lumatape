@@ -253,7 +253,6 @@ func (a *application) executeControl(r control.Request) {
 		case "disable":
 			err = a.disableFilter()
 		case "emergency":
-			a.control.CancelQueued()
 			err = a.emergency()
 		case "restore":
 			err = a.stopAndRestore()

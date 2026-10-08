@@ -51,6 +51,7 @@ type response struct {
 	Event    string
 	Sequence uint64
 	Error    string
+	Stage    string `json:",omitempty"`
 	Status   Status
 }
 
@@ -68,6 +69,7 @@ type Session struct {
 	closed               bool
 	sequence             uint64
 	status               Status
+	startupStage         string
 	everUpdated          bool
 	restorationConfirmed bool
 }
@@ -108,8 +110,10 @@ func Start(watchdogPath string) (*Session, error) {
 	go func() { s.readLoop(); _ = cmd.Wait(); close(s.processDone) }()
 	s.commands <- request{Command: "hello", Parent: parent}
 	if err = s.await("ready", 0); err != nil {
-		_ = s.Close()
-		return nil, err
+		// A worker still initializing cannot acknowledge Stop. Latch the failed
+		// handshake before cleanup so it closes the pipe without another ACK wait.
+		s.fail(err)
+		return nil, s.Close() // includes the latched handshake and any cleanup failure
 	}
 	return s, nil
 }
@@ -159,6 +163,12 @@ func (s *Session) readLoop() {
 			s.mu.Unlock()
 			continue
 		}
+		if r.Event == "initializing" {
+			s.mu.Lock()
+			s.startupStage = r.Stage
+			s.mu.Unlock()
+			continue
+		}
 		if r.Error != "" {
 			s.fail(errors.New(r.Error))
 			return
@@ -176,7 +186,10 @@ func (s *Session) readLoop() {
 	s.fail(fmt.Errorf("cursor worker closed: %w", err))
 }
 func (s *Session) await(event string, seq uint64) error {
-	timer := time.NewTimer(2 * time.Second)
+	return s.awaitFor(event, seq, 2*time.Second)
+}
+func (s *Session) awaitFor(event string, seq uint64, timeout time.Duration) error {
+	timer := time.NewTimer(timeout)
 	defer timer.Stop()
 	for {
 		select {
@@ -191,7 +204,15 @@ func (s *Session) await(event string, seq uint64) error {
 		case <-s.done:
 			return s.Poll()
 		case <-timer.C:
-			return errors.New("cursor worker restore/ready acknowledgement timed out")
+			s.mu.Lock()
+			stage := s.startupStage
+			s.mu.Unlock()
+			err := fmt.Errorf("cursor worker %s acknowledgement timed out", event)
+			if event == "ready" && stage != "" {
+				err = fmt.Errorf("%w (last initialization stage: %s)", err, stage)
+			}
+			s.fail(err)
+			return err
 		}
 	}
 }

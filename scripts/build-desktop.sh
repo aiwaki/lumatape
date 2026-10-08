@@ -6,7 +6,7 @@ set -eu
 export CARGO_BUILD_JOBS="${CARGO_BUILD_JOBS:-2}"
 cd "$(dirname "$0")/.."
 native=${1:?Usage: scripts/build-desktop.sh /absolute/native-install [version] [output-directory]}
-version=${2:-0.3.2}
+version=${2:-0.3.3}
 output=${3:-dist/lumatape-$version-windows-x64}
 revision=${LUMATAPE_COMMIT:-working-tree}
 stamp=${LUMATAPE_BUILD_TIME:-unknown}

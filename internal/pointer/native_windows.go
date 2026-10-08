@@ -193,21 +193,23 @@ type nativeDriver struct {
 	width, height              int
 }
 
-func newNativeDriver(parent identity) (cursorDriver, error) {
+func newNativeDriver(parent identity, progress func(string)) (cursorDriver, error) {
 	d := &nativeDriver{parent: parent}
-	if err := d.initialize(); err != nil {
+	if err := d.initialize(progress); err != nil {
 		_ = d.Close()
 		return nil, err
 	}
 	return d, nil
 }
-func (d *nativeDriver) initialize() error {
+func (d *nativeDriver) initialize(progress func(string)) error {
 	var err error
+	progress("projection ownership")
 	d.ownership, err = projectionMutex()
 	if err != nil {
 		return err
 	}
 	var created uint64
+	progress("parent identity")
 	d.parentHandle, created, err = openProcess(d.parent.PID)
 	if err != nil {
 		return err
@@ -215,19 +217,23 @@ func (d *nativeDriver) initialize() error {
 	if created != d.parent.Created {
 		return errors.New("cursor parent identity changed")
 	}
+	progress("physical-pixel DPI context")
 	if uc("SetProcessDpiAwarenessContext", ^uintptr(3)) == 0 {
 		if uc("AreDpiAwarenessContextsEqual", uc("GetThreadDpiAwarenessContext"), ^uintptr(3)) == 0 {
 			return errors.New("cursor projection requires physical-pixel DPI context")
 		}
 	}
+	progress("Magnification.dll loading")
 	if err = magInit.Find(); err != nil {
 		return err
 	}
+	progress("MagInitialize")
 	ok, _, e := magInit.Call()
 	if ok == 0 {
 		return fmt.Errorf("cursor magnification runtime: %w", e)
 	}
 	d.initialized = true
+	progress("cursor window class registration")
 	d.instance, _, _ = kernel32.NewProc("GetModuleHandleW").Call(0)
 	cls := windowClass{Size: uint32(unsafe.Sizeof(windowClass{})), Proc: cursorProc, Instance: d.instance, ClassName: u16("LumaTape.PointerProjection")}
 	if uc("RegisterClassExW", uintptr(unsafe.Pointer(&cls))) == 0 {
@@ -236,6 +242,7 @@ func (d *nativeDriver) initialize() error {
 	// The worker is intentionally not foreground and must never steal focus.
 	// SetWindowPos promotion of a normal window depends on foreground permission;
 	// create this surface in the documented topmost band from the beginning.
+	progress("cursor window creation")
 	d.window = uc("CreateWindowExW", 0x00080000|0x20|0x08000000|0x80|0x8, uintptr(unsafe.Pointer(cls.ClassName)), uintptr(unsafe.Pointer(u16("LumaTape pointer"))), 0x80000000, 0, 0, 1, 1, 0, 0, d.instance, 0)
 	if d.window == 0 {
 		return errors.New("create cursor projection window")
@@ -243,6 +250,7 @@ func (d *nativeDriver) initialize() error {
 	if ex := uc("GetWindowLongPtrW", d.window, ^uintptr(19)); ex&0x080800a8 != 0x080800a8 {
 		return fmt.Errorf("cursor creation styles were not applied: exstyle=%#x", ex)
 	}
+	progress("cursor capture exclusion")
 	if uc("SetWindowDisplayAffinity", d.window, 0x11) == 0 {
 		return errors.New("exclude projected cursor from capture")
 	}

@@ -365,6 +365,8 @@ impl<'a> Snapshot<'a> {
             &["", "lightweight", "full-gpu", "full-compatibility"],
         )?;
         let runtime_on = boolean(raw, "/runtime/enabled")?;
+        boolean(raw, "/runtime/effect_active")?;
+        boolean(raw, "/runtime/surface_visible")?;
         let format = boolean(raw, "/runtime/format_active")?;
         let recovery = boolean(raw, "/runtime/recovery_pending")? || phase == "recovery-error";
         let unsaved = boolean(raw, "/runtime/unsaved")?;
@@ -1065,12 +1067,18 @@ pub fn build(snapshot: &Value, sources: &Value, shaders: &Value) -> Result<MenuM
     ];
     let phase = snapshot["runtime"]["phase"].as_str().unwrap();
     let status = match phase {
-        "active" => match snapshot["runtime"]["backend"].as_str().unwrap() {
-            "full-gpu" => text("Работает · Full GPU", "Active · Full GPU"),
-            "full-compatibility" => text("Работает · Full CPU", "Active · Full CPU"),
-            "lightweight" => text("Работает · лёгкий режим", "Active · Lightweight"),
-            _ => text("Ожидает изображения", "Waiting for image"),
-        },
+        "active"
+            if snapshot["runtime"]["effect_active"] == true
+                && snapshot["runtime"]["surface_visible"] == true =>
+        {
+            match snapshot["runtime"]["backend"].as_str().unwrap() {
+                "full-gpu" => text("Работает · Full GPU", "Active · Full GPU"),
+                "full-compatibility" => text("Работает · Full CPU", "Active · Full CPU"),
+                "lightweight" => text("Работает · лёгкий режим", "Active · Lightweight"),
+                _ => text("Ожидает изображения", "Waiting for image"),
+            }
+        }
+        "active" => text("Ожидает изображения", "Waiting for image"),
         "disabled" => text("Эффект выключен", "Effect off"),
         "bypass" => text(
             "Исходное изображение · интенсивность 0%",
@@ -1136,7 +1144,7 @@ mod tests {
         let config = json!({"version":1,"mode":"overlay","enabled":false,"capture":{"transfer":"gpu"},"target":{"kind":"window","monitor":0,"window_title":"Game"},"preset":"Subtle CRT","shader":{"id":"","params":[0,0,0,0,0,0,0,0]},"effects":effects,"screen":{"shape":"rounded","corner_radius":0.077,"curvature":0.18,"glass":0.21},"aspect":{"enabled":false,"method":"mask","scale":"fit","source_dar":0},"input_mode":"mouse-exact","hotkeys":{"toggle":"Ctrl+F8","emergency":"Ctrl+F10"}});
         let mut tape = effects.clone();
         tape["vhs"]["noise"] = json!(0.62);
-        let snapshot = json!({"config":config,"source":source,"emergency_sequence":12,"confirmation_deadline":null,"presets":[{"name":"Subtle CRT","effects":effects},{"name":"VHS Tape","effects":tape},{"name":"Custom","effects":effects}],"runtime":{"phase":"disabled","backend":"","enabled":false,"format_active":false,"recovery_pending":false,"unsaved":false,"gpu":{"state":"unavailable"},"compatibility":{"state":"unknown"}}});
+        let snapshot = json!({"config":config,"source":source,"emergency_sequence":12,"confirmation_deadline":null,"presets":[{"name":"Subtle CRT","effects":effects},{"name":"VHS Tape","effects":tape},{"name":"Custom","effects":effects}],"runtime":{"phase":"disabled","backend":"","enabled":false,"effect_active":false,"surface_visible":false,"format_active":false,"recovery_pending":false,"unsaved":false,"gpu":{"state":"unavailable"},"compatibility":{"state":"unknown"}}});
         let sources = json!({"windows":[source],"monitors":[{"index":0}]});
         (snapshot, sources, json!({"items":[]}))
     }
@@ -1301,6 +1309,8 @@ mod tests {
             ("/emergency_sequence", json!(-1)),
             ("/runtime/phase", json!("future-phase")),
             ("/runtime/backend", json!("hardware")),
+            ("/runtime/effect_active", Value::Null),
+            ("/runtime/surface_visible", json!("true")),
             ("/config/enabled", json!("false")),
             ("/runtime/recovery_pending", Value::Null),
             ("/config/shader/params", json!([])),
@@ -1610,6 +1620,8 @@ mod tests {
                 snapshot["config"]["aspect"]["source_dar"] = json!(1.25);
                 snapshot["runtime"]["phase"] = json!("active");
                 snapshot["runtime"]["backend"] = json!("full-compatibility");
+                snapshot["runtime"]["effect_active"] = json!(true);
+                snapshot["runtime"]["surface_visible"] = json!(true);
                 snapshot["runtime"]["format_active"] = json!(scenario == 1);
                 snapshot["config"]["preset"] = json!("Custom");
             }
@@ -1716,6 +1728,51 @@ mod tests {
     }
 
     #[test]
+    fn active_label_requires_a_visible_effect_not_just_an_enabled_request() {
+        for language in [crate::i18n::Language::Ru, crate::i18n::Language::En] {
+            crate::i18n::with_language(language, || {
+                let (mut snapshot, sources, shaders) = fixture();
+                snapshot["config"]["enabled"] = json!(true);
+                snapshot["runtime"]["enabled"] = json!(true);
+                snapshot["runtime"]["phase"] = json!("active");
+                snapshot["runtime"]["backend"] = json!("full-compatibility");
+                for (effect, visible) in [(false, false), (false, true), (true, false)] {
+                    snapshot["runtime"]["effect_active"] = json!(effect);
+                    snapshot["runtime"]["surface_visible"] = json!(visible);
+                    let menu = build(&snapshot, &sources, &shaders).unwrap();
+                    assert_eq!(
+                        menu.status,
+                        text("Ожидает изображения", "Waiting for image")
+                    );
+                    assert!(menu.wants_off, "Off must still cancel the enabled request");
+                }
+                snapshot["runtime"]["effect_active"] = json!(true);
+                snapshot["runtime"]["surface_visible"] = json!(true);
+                assert_eq!(
+                    build(&snapshot, &sources, &shaders).unwrap().status,
+                    text("Работает · Full CPU", "Active · Full CPU")
+                );
+                for phase in [
+                    "disabled",
+                    "bypass",
+                    "paused-settings",
+                    "paused-focus",
+                    "waiting-frame",
+                    "error",
+                ] {
+                    snapshot["runtime"]["phase"] = json!(phase);
+                    let menu = build(&snapshot, &sources, &shaders).unwrap();
+                    assert!(
+                        !menu.status.starts_with(text("Работает", "Active")),
+                        "{phase}"
+                    );
+                    assert!(menu.wants_off, "{phase}");
+                }
+            });
+        }
+    }
+
+    #[test]
     fn every_runtime_phase_and_backend_has_english_status() {
         use crate::i18n::{with_language, Language};
 
@@ -1742,6 +1799,8 @@ mod tests {
             let mut snapshot = base.clone();
             snapshot["runtime"]["phase"] = json!(phase);
             snapshot["runtime"]["backend"] = json!(backend);
+            snapshot["runtime"]["effect_active"] = json!(phase == "active");
+            snapshot["runtime"]["surface_visible"] = json!(phase == "active");
             let ru = with_language(Language::Ru, || {
                 build(&snapshot, &sources, &shaders).unwrap()
             });

@@ -61,7 +61,7 @@ func RunWorker(input io.Reader, output io.Writer) error {
 	defer runtime.UnlockOSThread()
 	return runWorker(input, output, newNativeDriver)
 }
-func runWorker(input io.Reader, output io.Writer, factory func(identity) (cursorDriver, error)) (result error) {
+func runWorker(input io.Reader, output io.Writer, factory func(identity, func(string)) (cursorDriver, error)) (result error) {
 	finished := make(chan struct{})
 	defer close(finished)
 	commands := make(chan request, 8)
@@ -87,7 +87,7 @@ func runWorker(input io.Reader, output io.Writer, factory func(identity) (cursor
 		}
 		readError <- err
 	}()
-	outputs := make(chan response, 8)
+	outputs := make(chan response, 16)
 	writeError := make(chan error, 1)
 	go func() {
 		enc := json.NewEncoder(output)
@@ -122,7 +122,11 @@ func runWorker(input io.Reader, output io.Writer, factory func(identity) (cursor
 	if hello.Command != "hello" || hello.Parent.PID == 0 || hello.Parent.Created == 0 {
 		return errors.New("cursor worker needs bound parent identity")
 	}
-	d, err := factory(hello.Parent)
+	// Stage diagnostics share the bounded writer, never the native thread's I/O.
+	// They do not renew the parent's fixed startup deadline.
+	d, err := factory(hello.Parent, func(stage string) {
+		_ = send(response{Event: "initializing", Stage: stage})
+	})
 	if err != nil {
 		_ = send(response{Event: "error", Error: err.Error()})
 		return err

@@ -67,6 +67,7 @@ cover rules, not thousands of real display or game sessions.
 | Menu | Left and right click open the same native menu. Version appears immediately above Quit; About LumaTape opens the project GitHub URL. |
 | Language | Russian Windows UI language selects RU; other UI languages select EN. Regions/date formats do not decide the language. Restart to apply a Windows UI language change. |
 | Source | Game lists actual windows and distinguishes duplicate titles. A closed source is not replaced by a different same-title process. |
+| Status | With the effect off, select a source and immediately open the tray. Neither the menu nor the tooltip should briefly claim Active. Repeat after a hotkey, focus loss and source closure; an enabled preference alone does not mean a visible effect. |
 | Enable | Open Tools → Test scene, select it under Game, choose an effect and enable it. Return focus yourself; require fresh captured frames and working native input. |
 | Settings | Changes apply directly, checked choices match applied state, and invalid combinations explain why they are unavailable. No intensity slider or manual shader-parameter editor is expected. |
 | Failure | Missing capture DLL, device/source failure or hotkey conflict leaves no opaque covering surface. An error must not claim that a previous working configuration was replaced successfully. |
@@ -79,7 +80,14 @@ Useful identity-bound native helpers, run from the repository root:
 ./scripts/windows-tray-only-smoke.ps1 -Bundle $Bundle -HostProcessId $App.Id -Output "$Evidence/inventory.json"
 ./scripts/windows-tray-menu-smoke.ps1 -Bundle $Bundle -HostProcessId $App.Id -Output "$Evidence/menu.json"
 ./scripts/windows-testcard-fullscreen-smoke.ps1 -Exe "$Bundle/engine/lumatape-testcard.exe" -Output "$Evidence/fullscreen.json"
+# $TestExecutable is the current Rust test executable from cargo test --no-run.
+./scripts/windows-testcard-close-smoke.ps1 -TestExecutable $TestExecutable -Output "$Evidence/delayed-close.json"
 ```
+
+The last check creates its own hidden HWND after the first close attempt and
+checks that `WM_CLOSE` is sent again. Also open the test scene and immediately
+choose Quit: one command should close the app. If the scene fails to close, the
+engine should remain available for another attempt.
 
 Read each helper's parameters and scope first. Inventory is read-only; menu
 inspection opens its own native menu; `-MenuPath` dispatches an actual command.

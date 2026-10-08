@@ -1,4 +1,7 @@
 //! The complete application surface: a Tauri native menu, without a WebView.
+#[path = "tray_refresh.rs"]
+mod refresh_state;
+
 use crate::{
     native_dialog,
     protocol::Request,
@@ -131,6 +134,16 @@ struct Handles {
     groups: Vec<Section>,
 }
 impl Handles {
+    fn sync_status(&self, status: &str) -> Result<(), String> {
+        // Attempt both updates even if one native surface fails. In particular,
+        // an unavailable engine must never leave an old Active tooltip behind.
+        let menu = self.status.set_text(status);
+        let tooltip = self
+            .icon
+            .set_tooltip(Some(format!("LumaTape — {}", status.replace("&&", "&"))));
+        menu.and(tooltip).map_err(|e| e.to_string())
+    }
+
     /// Called only on the main thread. Query real membership so retries after
     /// a failed native update cannot insert a duplicate confirmation item.
     fn sync_confirmation(&self, pending: bool, busy: bool) -> Result<(), String> {
@@ -160,7 +173,7 @@ pub struct Controller {
     handles: Mutex<Option<Handles>>,
     data: Mutex<Option<Data>>,
     last_error: Mutex<Option<String>>,
-    generation: AtomicU64,
+    refresh_state: refresh_state::RefreshState,
     cancel_epoch: AtomicU64,
     emergency_floor: AtomicU64,
     busy: AtomicBool,
@@ -174,7 +187,7 @@ impl Controller {
             handles: Mutex::new(None),
             data: Mutex::new(None),
             last_error: Mutex::new(None),
-            generation: AtomicU64::new(0),
+            refresh_state: refresh_state::RefreshState::default(),
             cancel_epoch: AtomicU64::new(0),
             emergency_floor: AtomicU64::new(0),
             busy: AtomicBool::new(false),
@@ -184,7 +197,7 @@ impl Controller {
         }
     }
     pub fn invalidate(&self) {
-        self.generation.fetch_add(1, Ordering::AcqRel);
+        self.refresh_state.invalidate();
     }
     pub fn cancel_epoch(&self) -> &AtomicU64 {
         &self.cancel_epoch
@@ -399,6 +412,7 @@ pub fn engine_event(app: &AppHandle, event: &Value) {
     let Some(state) = app.try_state::<Host>() else {
         return;
     };
+    let mut emergency_advanced = false;
     if let Some(sequence) = event["data"]["emergency_sequence"].as_u64() {
         if sequence
             > state
@@ -407,8 +421,16 @@ pub fn engine_event(app: &AppHandle, event: &Value) {
                 .fetch_max(sequence, Ordering::AcqRel)
         {
             cancel_pending_actions(&state);
-            state.tray.invalidate();
+            emergency_advanced = true;
         }
+    }
+    if emergency_advanced
+        || matches!(
+            event["event"].as_str(),
+            Some("state_changed" | "fatal" | "stopped")
+        )
+    {
+        state.tray.invalidate();
     }
 }
 pub fn install(app: &AppHandle) {
@@ -429,6 +451,17 @@ pub fn install(app: &AppHandle) {
             return;
         }
     }
+    let status_app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            let state = status_app.state::<Host>();
+            state.tray.refresh_state.changed().await;
+            if state.allow_exit.load(Ordering::Acquire) {
+                break;
+            }
+            refresh_status(&status_app).await;
+        }
+    });
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let mut misses = 0u8;
@@ -488,9 +521,11 @@ async fn read_data(app: &AppHandle) -> Result<Data, String> {
             Duration::from_secs(3),
         )
     };
-    let snapshot = read("snapshot").await?;
     let sources = read("sources").await?;
     let shaders = read("shaders").await?;
+    // Enumeration can be slow. The state shown beside those choices must be
+    // captured after the catalogues rather than before them.
+    let snapshot = read("snapshot").await?;
     let model = tray_model::build(&snapshot, &sources, &shaders)?;
     Ok(Data {
         snapshot,
@@ -505,12 +540,51 @@ async fn refresh(app: &AppHandle) {
     if state.tray.refreshing.swap(true, Ordering::AcqRel) {
         return;
     }
-    let generation = state.tray.generation.load(Ordering::Acquire);
+    let ticket = state.tray.refresh_state.begin();
     let result = read_data(app).await;
+    state.tray.refreshing.store(false, Ordering::Release);
+    // A rejected result may re-arm the event worker immediately on the UI
+    // thread. Release the catalogue reader before allowing that retry.
+    publish_refresh(app, ticket, result);
+}
+
+async fn refresh_status(app: &AppHandle) {
+    let state = app.state::<Host>();
+    let cached = state.tray.data.lock().unwrap().clone();
+    let Some(cached) = cached else {
+        // Startup / recovery needs the first catalogues before enabling actions.
+        refresh(app).await;
+        return;
+    };
+    let ticket = state.tray.refresh_state.begin();
+    let result = async {
+        let snapshot = state
+            .engine()?
+            .internal(
+                Request {
+                    kind: "snapshot".into(),
+                    payload: Value::Null,
+                },
+                Duration::from_secs(3),
+            )
+            .await?;
+        let model = tray_model::build(&snapshot, &cached.sources, &cached.shaders)?;
+        Ok(Data {
+            snapshot,
+            sources: cached.sources,
+            shaders: cached.shaders,
+            model,
+        })
+    }
+    .await;
+    publish_refresh(app, ticket, result);
+}
+
+fn publish_refresh(app: &AppHandle, ticket: refresh_state::Ticket, result: Result<Data, String>) {
     let target = app.clone();
     let _ = app.run_on_main_thread(move || {
         let state = target.state::<Host>();
-        if generation != state.tray.generation.load(Ordering::Acquire) {
+        if !state.tray.refresh_state.accept(ticket) {
             return;
         }
         match result {
@@ -541,9 +615,7 @@ async fn refresh(app: &AppHandle) {
                 if let Some(h) = handles.as_mut() {
                     let busy = state.tray.busy.load(Ordering::Acquire);
                     let update = (|| -> Result<(), String> {
-                        h.status
-                            .set_text(&data.model.status)
-                            .map_err(|e| e.to_string())?;
+                        h.sync_status(&data.model.status)?;
                         h.power
                             .set_text(if busy {
                                 crate::i18n::text("Выключить", "Turn off")
@@ -555,12 +627,6 @@ async fn refresh(app: &AppHandle) {
                             .set_enabled(busy || data.model.power.enabled)
                             .map_err(|e| e.to_string())?;
                         h.sync_confirmation(data.model.confirmation_pending, busy)?;
-                        h.icon
-                            .set_tooltip(Some(format!(
-                                "LumaTape — {}",
-                                data.model.status.replace("&&", "&")
-                            )))
-                            .map_err(|e| e.to_string())?;
                         h.sources
                             .menu
                             .set_enabled(true)
@@ -599,9 +665,7 @@ async fn refresh(app: &AppHandle) {
                 *state.tray.last_error.lock().unwrap() = Some(friendly_error(&error));
                 *state.tray.data.lock().unwrap() = None;
                 if let Some(h) = state.tray.handles.lock().unwrap().as_ref() {
-                    let _ = h
-                        .status
-                        .set_text(crate::i18n::text("Движок недоступен — Сервис → Последняя ошибка", "Engine unavailable — Tools → Last error"));
+                    let _ = h.sync_status(crate::i18n::text("Движок недоступен — Сервис → Последняя ошибка", "Engine unavailable — Tools → Last error"));
                     let _ = h.error.set_enabled(true);
                     let _ = h.sources.menu.set_enabled(false);
                     let _ = h.effects.menu.set_enabled(false);
@@ -613,7 +677,6 @@ async fn refresh(app: &AppHandle) {
             }
         }
     });
-    state.tray.refreshing.store(false, Ordering::Release);
 }
 fn friendly_error(error: &str) -> String {
     serde_json::from_str::<Value>(error)

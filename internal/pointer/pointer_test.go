@@ -129,7 +129,7 @@ func startTestWorker(t *testing.T) *testWorker {
 	d := &fakeDriver{alive: true}
 	w := &testWorker{in: inW, out: outR, enc: json.NewEncoder(inW), replies: make(chan response, 16), done: make(chan error, 1), d: d}
 	go func() {
-		w.done <- runWorker(inR, outW, func(identity) (cursorDriver, error) { return d, nil })
+		w.done <- runWorker(inR, outW, func(identity, func(string)) (cursorDriver, error) { return d, nil })
 		_ = outW.Close()
 		_ = inR.Close()
 	}()
@@ -291,7 +291,7 @@ func TestBlockedOutputDoesNotBlockLeaseRestoration(t *testing.T) {
 	d := &fakeDriver{alive: true}
 	done := make(chan error, 1)
 	go func() {
-		done <- runWorker(inR, out, func(identity) (cursorDriver, error) { return d, nil })
+		done <- runWorker(inR, out, func(identity, func(string)) (cursorDriver, error) { return d, nil })
 		_ = inR.Close()
 	}()
 	defer func() { _ = inW.Close(); close(out.release) }()
@@ -407,7 +407,7 @@ func TestWorkerParentDeathClassifiesTransportLossButKeepsCleanupErrors(t *testin
 			d := &fakeDriver{alive: true, invalidateError: tc.cleanup}
 			done := make(chan error, 1)
 			go func() {
-				done <- runWorker(inR, parentLossOutput{d, tc.alive}, func(identity) (cursorDriver, error) { return d, nil })
+				done <- runWorker(inR, parentLossOutput{d, tc.alive}, func(identity, func(string)) (cursorDriver, error) { return d, nil })
 			}()
 			if err := json.NewEncoder(inW).Encode(request{Command: "hello", Parent: identity{1, 2}}); err != nil {
 				t.Fatal(err)
@@ -461,7 +461,7 @@ func TestWorkerParentDeathClassifiesWindowRaceButKeepsEarlierRestoreFailure(t *t
 		d := &deathDuringTick{fakeDriver: &fakeDriver{alive: true}, cleanup: cleanup}
 		done := make(chan error, 1)
 		go func() {
-			done <- runWorker(inR, outW, func(identity) (cursorDriver, error) { return d, nil })
+			done <- runWorker(inR, outW, func(identity, func(string)) (cursorDriver, error) { return d, nil })
 			_ = outW.Close()
 		}()
 		enc := json.NewEncoder(inW)

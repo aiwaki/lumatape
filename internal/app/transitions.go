@@ -47,7 +47,9 @@ type RuntimeStatus struct {
 	ShaderID           string             `json:"shader_id"`
 	ShaderName         string             `json:"shader_name"`
 	Preset             string             `json:"preset"`
-	Enabled            bool               `json:"enabled"`
+	Enabled            bool               `json:"enabled"` // requested preference, retained for controller compatibility
+	EffectActive       bool               `json:"effect_active"`
+	SurfaceVisible     bool               `json:"surface_visible"`
 	EffectiveIntensity float64            `json:"effective_intensity"`
 	GPU                CapabilityStatus   `json:"gpu"`
 	Compatibility      CapabilityStatus   `json:"compatibility"`
@@ -62,6 +64,24 @@ type RuntimeStatus struct {
 	CPUWorkMS          float64            `json:"cpu_work_ms"`
 	GPUShaderMS        *float64           `json:"gpu_shader_ms"`
 	GPUObservedAt      time.Time          `json:"gpu_observed_at"`
+}
+
+// observePresentation combines the render-thread state with a fresh native
+// visibility readback. The cursor worker may hide the HWND independently after
+// focus/geometry/lease loss, so a cached active phase alone is not proof of output.
+func (s *RuntimeStatus) observePresentation(surfaceVisible, suspended bool) {
+	s.SurfaceVisible = surfaceVisible
+	if !surfaceVisible {
+		s.Backend = ""
+		if s.FormatMethod == "mask" {
+			s.FormatActive = false
+		}
+		if s.Phase == "active" || s.Phase == "bypass" {
+			s.Phase = "waiting-frame"
+			s.Reason = locale.Text("Ожидается показ нового кадра", "Waiting for a new frame to be shown")
+		}
+	}
+	s.EffectActive = surfaceVisible && !suspended && s.Enabled && s.EffectiveIntensity > 0 && s.Phase == "active" && s.Backend != ""
 }
 
 type AppliedSettingsError struct{ Err error }

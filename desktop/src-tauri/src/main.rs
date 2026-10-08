@@ -72,12 +72,13 @@ async fn quit_host(app: &tauri::AppHandle) -> Result<(), String> {
         )
         .into());
     }
-    let result = match state.engine() {
-        Ok(engine) => engine.stop_for_explicit_quit().await,
-        Err(_) => Ok(1), // Start failed: no engine exists, but retain a failure exit.
-    };
-    let result = match result {
-        Ok(exit_code) => state.testcard.close().await.map(|()| exit_code),
+    // Keep the engine usable if its own test scene cannot close. Terminal
+    // ownership already blocks new scene launches, as in the updater path.
+    let result = match state.testcard.close().await {
+        Ok(()) => match state.engine() {
+            Ok(engine) => engine.stop_for_explicit_quit().await,
+            Err(_) => Ok(1), // Start failed: no engine exists, but retain a failure exit.
+        },
         Err(error) => Err(error),
     };
     match result {

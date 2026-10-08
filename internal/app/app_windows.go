@@ -629,6 +629,7 @@ func (a *application) RuntimeStatus() RuntimeStatus {
 			s.Backend = "full-" + transferName(a.capture.Transfer())
 		}
 	}
+	s.observePresentation(a.visible && a.window != nil && win32.Visible(a.window.HWND), a.suspended)
 	return s
 }
 func (a *application) save() error {
@@ -658,6 +659,9 @@ func (a *application) hide() {
 		if a.pacer != nil {
 			a.pacer.Reset(time.Now())
 		}
+	}
+	if a.phase == "active" || a.phase == "bypass" {
+		a.setPhase("waiting-frame", locale.Text("Ожидается показ нового кадра", "Waiting for a new frame to be shown"))
 	}
 }
 func (a *application) closeCapture() error {
@@ -813,6 +817,7 @@ func (a *application) frame() error {
 		}
 		if source.W <= 0 || source.H <= 0 {
 			a.hide()
+			a.setPhase("waiting-frame", locale.Text("Окно источника не имеет видимой области", "The source window has no visible area"))
 			return nil
 		}
 		if a.cfg.Mode == "full" {
@@ -932,6 +937,7 @@ func (a *application) frame() error {
 	w, h := a.window.Framebuffer()
 	if w != p.Bounds.W || h != p.Bounds.H {
 		a.hide()
+		a.setPhase("waiting-frame", locale.Text("Ожидается новый размер поверхности", "Waiting for the presentation surface to resize"))
 		return release()
 	} // wait for DPI/resize acknowledgement
 	if a.metrics == nil || a.metricSize != (geometry.Size{W: w, H: h}) {
@@ -1129,6 +1135,9 @@ func (a *application) stopAndRestore() error {
 func (a *application) emergency() error {
 	a.emergencyBarrier.advance() // cancel stale UI intent even if restore/save fails
 	if a.control != nil {
+		// Hotkeys, the native menu and IPC share this boundary. Otherwise a
+		// queued legacy toggle/reload could undo a keyboard emergency immediately.
+		a.control.CancelQueued()
 		a.control.Emit("state_changed", map[string]any{"emergency_sequence": a.emergencyBarrier.sequence})
 	}
 	a.hide()

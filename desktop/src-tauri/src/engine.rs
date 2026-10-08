@@ -207,10 +207,9 @@ impl Engine {
                         status.ok()
                     ),
                 );
-                let _ = app.emit(
-                    "engine_event",
-                    json!({"v":1,"event":"fatal","data":self.terminal_errors.current()}),
-                );
+                let event = json!({"v":1,"event":"fatal","data":self.terminal_errors.current()});
+                crate::tray::engine_event(app, &event);
+                let _ = app.emit("engine_event", event);
             }
         }
     }
