@@ -5,6 +5,7 @@ package main
 
 import (
 	"bytes"
+	"debug/pe"
 	"encoding/binary"
 	"encoding/xml"
 	"errors"
@@ -103,6 +104,7 @@ func run(root, version, rc, cvtres string, assetsOnly bool) error {
 	if rc == "" || cvtres == "" {
 		return errors.New("resource compiler unavailable: pass -rc and -cvtres (Windows SDK/MSVC or LLVM tools)")
 	}
+	fmt.Printf("resources: rc=%s; cvtres=%s\n", rc, cvtres)
 	dir := filepath.Join(root, "build", "resources")
 	if err = os.MkdirAll(dir, 0755); err != nil {
 		return err
@@ -126,17 +128,65 @@ func run(root, version, rc, cvtres string, assetsOnly bool) error {
 		if err != nil {
 			return err
 		}
-		// cvtres defaults to wall-clock COFF timestamps. Normalize this header
-		// field so identical SVG/version inputs produce identical Go resources.
-		if len(b) < 20 || binary.LittleEndian.Uint16(b[:2]) != 0x8664 {
-			return errors.New("resource converter did not produce AMD64 COFF")
+		b, err = normalizeResourceCOFF(b)
+		if err != nil {
+			return fmt.Errorf("%s resource object: %w", p.name, err)
 		}
-		binary.LittleEndian.PutUint32(b[4:8], 0)
 		if err = os.WriteFile(out, b, 0644); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+func normalizeResourceCOFF(data []byte) ([]byte, error) {
+	if len(data) < 20 || binary.LittleEndian.Uint16(data[:2]) != pe.IMAGE_FILE_MACHINE_AMD64 || binary.LittleEndian.Uint16(data[16:18]) != 0 {
+		return nil, errors.New("resource converter did not produce AMD64 COFF")
+	}
+	f, err := pe.NewFile(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("invalid resource COFF: %w", err)
+	}
+	defer f.Close()
+	out := bytes.Clone(data)
+	// cvtres embeds its wall-clock timestamp and, unlike llvm-cvtres, may
+	// emit the absolute compiler-ID symbol @comp.id. Go's PE linker accepts
+	// @feat.00 but rejects @comp.id with "sectnum < 0". Mark only this unused
+	// compiler metadata as IMAGE_SYM_DEBUG, which Go already ignores. Keep
+	// symbol indices, relocations, feature flags and all resource bytes intact.
+	for index := 0; index < len(f.COFFSymbols); {
+		symbol := f.COFFSymbols[index]
+		next := index + 1 + int(symbol.NumberOfAuxSymbols)
+		if next > len(f.COFFSymbols) {
+			return nil, errors.New("resource COFF has truncated auxiliary symbols")
+		}
+		name, err := symbol.FullName(f.StringTable)
+		if err != nil {
+			return nil, fmt.Errorf("invalid resource COFF symbol: %w", err)
+		}
+		if name == "@comp.id" {
+			if (symbol.SectionNumber != -1 && symbol.SectionNumber != -2) || symbol.StorageClass != 3 || symbol.Type != 0 || symbol.NumberOfAuxSymbols != 0 {
+				return nil, errors.New("unexpected @comp.id resource metadata")
+			}
+			for _, section := range f.Sections {
+				for _, relocation := range section.Relocs {
+					if relocation.SymbolTableIndex == uint32(index) {
+						return nil, errors.New("resource relocation references compiler metadata @comp.id")
+					}
+				}
+			}
+			offset := uint64(f.PointerToSymbolTable) + uint64(index)*18 + 12
+			if offset+2 > uint64(len(out)) {
+				return nil, errors.New("resource COFF symbol offset is outside the file")
+			}
+			binary.LittleEndian.PutUint16(out[offset:offset+2], 0xfffe) // IMAGE_SYM_DEBUG
+		} else if symbol.SectionNumber == -1 && name != "@feat.00" {
+			return nil, fmt.Errorf("unsupported absolute resource symbol %q", name)
+		}
+		index = next
+	}
+	binary.LittleEndian.PutUint32(out[4:8], 0)
+	return out, nil
 }
 
 func writePNG(path string, im image.Image) error {

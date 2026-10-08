@@ -32,8 +32,8 @@ cp "$bundle/$name" "$bundle/$name.sig" "$output/"
 python3 scripts/prepare-update.py --installer "$output/$name" --signature "$output/$name.sig" \
     --public-key desktop/src-tauri/updater.pub --version "$version" \
     --published-at "$LUMATAPE_BUILD_TIME" --output "$output/index"
-# Tauri's bundler patches the EXE with its bundle type. Package those exact bytes
-# again so the portable manifest and installed host agree with the final binary.
+# Package the final portable EXE after bundling. Tauri temporarily changes its
+# bundle marker to NSS inside NSIS, then restores UNK for the portable binary.
 python3 scripts/package-desktop.py --shell desktop/src-tauri/target/x86_64-pc-windows-msvc/release/lumatape.exe \
     --engine desktop/src-tauri/resources/engine --licenses build/desktop-licenses \
     --version "$version" --revision "$LUMATAPE_COMMIT" --build-time "$LUMATAPE_BUILD_TIME" --update-channel configured
