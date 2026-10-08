@@ -1,6 +1,6 @@
 <svg width="64" height="64" viewBox="0 0 64 64" fill="none" xmlns="http://www.w3.org/2000/svg">
 <rect width="64" height="64" fill="#E5E5E5"/>
-<g id="Monochrome CRT &#194;&#183; clean">
+<g id="Warm CRT glass &#194;&#183; study">
 <g id="Clip path group">
 <mask id="mask0_0_1" style="mask-type:luminance" maskUnits="userSpaceOnUse" x="6" y="6" width="52" height="52">
 <g id="screen">
@@ -8,7 +8,7 @@
 </g>
 </mask>
 <g mask="url(#mask0_0_1)">
-<path id="Vector_2" d="M14 6H6V46H14V6Z" fill="#E4E4E4"/>
+<path id="Vector_2" d="M14 6H6V46H14V6Z" fill="#D7CCB6"/>
 </g>
 </g>
 <g id="Clip path group_2">
@@ -18,7 +18,7 @@
 </g>
 </mask>
 <g mask="url(#mask1_0_1)">
-<path id="Vector_4" d="M21 6H14V46H21V6Z" fill="#CBCBCB"/>
+<path id="Vector_4" d="M21 6H14V46H21V6Z" fill="#BAAC5C"/>
 </g>
 </g>
 <g id="Clip path group_3">
@@ -28,7 +28,7 @@
 </g>
 </mask>
 <g mask="url(#mask2_0_1)">
-<path id="Vector_6" d="M28 6H21V46H28V6Z" fill="#B2B2B2"/>
+<path id="Vector_6" d="M28 6H21V46H28V6Z" fill="#66B1AD"/>
 </g>
 </g>
 <g id="Clip path group_4">
@@ -38,7 +38,7 @@
 </g>
 </mask>
 <g mask="url(#mask3_0_1)">
-<path id="Vector_8" d="M36 6H28V46H36V6Z" fill="#989898"/>
+<path id="Vector_8" d="M36 6H28V46H36V6Z" fill="#6F9A6B"/>
 </g>
 </g>
 <g id="Clip path group_5">
@@ -48,7 +48,7 @@
 </g>
 </mask>
 <g mask="url(#mask4_0_1)">
-<path id="Vector_10" d="M43 6H36V46H43V6Z" fill="#7F7F7F"/>
+<path id="Vector_10" d="M43 6H36V46H43V6Z" fill="#A47491"/>
 </g>
 </g>
 <g id="Clip path group_6">
@@ -58,7 +58,7 @@
 </g>
 </mask>
 <g mask="url(#mask5_0_1)">
-<path id="Vector_12" d="M50 6H43V46H50V6Z" fill="#666666"/>
+<path id="Vector_12" d="M50 6H43V46H50V6Z" fill="#B87563"/>
 </g>
 </g>
 <g id="Clip path group_7">
@@ -68,7 +68,7 @@
 </g>
 </mask>
 <g mask="url(#mask6_0_1)">
-<path id="Vector_14" d="M58 6H50V46H58V6Z" fill="#4D4D4D"/>
+<path id="Vector_14" d="M58 6H50V46H58V6Z" fill="#6579AD"/>
 </g>
 </g>
 <g id="Clip path group_8">
@@ -78,7 +78,7 @@
 </g>
 </mask>
 <g mask="url(#mask7_0_1)">
-<path id="Vector_16" d="M23 46H6V58H23V46Z" fill="#202020"/>
+<path id="Vector_16" d="M23 46H6V58H23V46Z" fill="#292826"/>
 </g>
 </g>
 <g id="Clip path group_9">
@@ -88,7 +88,7 @@
 </g>
 </mask>
 <g mask="url(#mask8_0_1)">
-<path id="Vector_18" d="M41 46H23V58H41V46Z" fill="#E4E4E4"/>
+<path id="Vector_18" d="M41 46H23V58H41V46Z" fill="#D7CCB6"/>
 </g>
 </g>
 <g id="Clip path group_10">
@@ -98,16 +98,25 @@
 </g>
 </mask>
 <g mask="url(#mask9_0_1)">
-<path id="Vector_20" d="M58 46H41V58H58V46Z" fill="#202020"/>
+<path id="Vector_20" d="M58 46H41V58H58V46Z" fill="#292826"/>
 </g>
 </g>
-<rect id="Subtle neutral glass" x="6" y="6" width="52" height="52" rx="12" fill="url(#paint0_linear_0_1)"/>
+<g id="Broad glass shading">
+<rect x="6" y="6" width="52" height="52" rx="12" fill="url(#paint0_linear_0_1)"/>
+<rect x="6" y="6" width="52" height="52" rx="12" fill="url(#paint1_radial_0_1)"/>
+</g>
 </g>
 <defs>
 <linearGradient id="paint0_linear_0_1" x1="32" y1="6" x2="32" y2="58" gradientUnits="userSpaceOnUse">
-<stop stop-color="white" stop-opacity="0.05"/>
-<stop offset="0.5" stop-color="white" stop-opacity="0"/>
-<stop offset="1" stop-opacity="0.035"/>
+<stop stop-color="#FFEDC2" stop-opacity="0.19"/>
+<stop offset="0.35" stop-color="#FFEDC2" stop-opacity="0.06"/>
+<stop offset="0.66" stop-color="#1C130B" stop-opacity="0"/>
+<stop offset="1" stop-color="#1C130B" stop-opacity="0.13"/>
 </linearGradient>
+<radialGradient id="paint1_radial_0_1" cx="0" cy="0" r="1" gradientUnits="userSpaceOnUse" gradientTransform="translate(32 32) scale(26)">
+<stop stop-color="#1A120B" stop-opacity="0"/>
+<stop offset="0.5" stop-color="#1A120B" stop-opacity="0.01"/>
+<stop offset="1" stop-color="#1A120B" stop-opacity="0.2"/>
+</radialGradient>
 </defs>
 </svg>
