@@ -41,6 +41,17 @@ appears in the menu. The [guide](shaders/README.en.md) has examples and a ready-
 Check for a new version through "Tools → Check for updates…". Installation requires
 confirmation. Update a portable ZIP copy by extracting the new package separately.
 
+## Start with Windows
+
+"Tools → Start with Windows" launches LumaTape in the tray when the current user
+signs in. The option requires installation through `LumaTape_<version>_x64-setup.exe`
+and cannot be enabled in a portable ZIP copy. It is off by default. This setting does
+not turn on the effect.
+
+If you disable LumaTape in Task Manager's Startup apps, it stays disabled until you
+explicitly enable startup again. Updates preserve the setting; uninstalling
+LumaTape removes its startup entry.
+
 ## Image settings
 
 ### Processing

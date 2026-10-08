@@ -1,7 +1,9 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
+mod autostart;
 mod engine;
 mod i18n;
 mod lifecycle;
+mod links;
 mod native_dialog;
 mod protocol;
 mod testcard;
@@ -22,6 +24,7 @@ struct Host {
     engine_directory: std::path::PathBuf,
     testcard: testcard::TestCard,
     updates: updater::Updater,
+    autostart: autostart::Controller,
     terminal: AtomicU8,
     allow_exit: AtomicBool,
     tray: tray::Controller,
@@ -38,8 +41,8 @@ async fn request_engine(app: &tauri::AppHandle, request: Request) -> Result<Valu
         && !protocol::allowed_during_terminal(&request.kind)
     {
         return Err(crate::i18n::text(
-            "Выполняется завершение или установка обновления",
-            "A terminal operation is in progress",
+            "LumaTape закрывается или обновляется.",
+            "LumaTape is closing or updating.",
         )
         .into());
     }
@@ -53,6 +56,15 @@ async fn request_engine(app: &tauri::AppHandle, request: Request) -> Result<Valu
     }
     result
 }
+// Terminal ownership rejects new startup changes. Drain an already running
+// registry operation before stopping the host or handing over to NSIS.
+async fn finish_autostart_change(app: &tauri::AppHandle) -> Result<(), String> {
+    let target = app.clone();
+    tauri::async_runtime::spawn_blocking(move || target.state::<Host>().autostart.wait_idle())
+        .await
+        .map_err(|error| error.to_string())
+}
+
 async fn quit_host(app: &tauri::AppHandle) -> Result<(), String> {
     let state = app.state::<Host>();
     // Quit has already cancelled a pending update through the tray. Give its
@@ -67,10 +79,16 @@ async fn quit_host(app: &tauri::AppHandle) -> Result<(), String> {
         .is_err()
     {
         return Err(crate::i18n::text(
-            "Другая операция завершения уже выполняется",
-            "Another terminal operation is in progress",
+            "LumaTape уже закрывается или обновляется.",
+            "LumaTape is already closing or updating.",
         )
         .into());
+    }
+    if let Err(error) = finish_autostart_change(app).await {
+        let _ = state
+            .terminal
+            .compare_exchange(1, 0, Ordering::AcqRel, Ordering::Acquire);
+        return Err(error);
     }
     // Keep the engine usable if its own test scene cannot close. Terminal
     // ownership already blocks new scene launches, as in the updater path.
@@ -115,10 +133,16 @@ async fn install_update_host(
         .is_err()
     {
         return Err(crate::i18n::text(
-            "Другая операция завершения уже выполняется",
-            "Another shutdown or installation is already in progress",
+            "LumaTape уже закрывается или обновляется.",
+            "LumaTape is already closing or updating.",
         )
         .into());
+    }
+    if let Err(error) = finish_autostart_change(app).await {
+        let _ = state
+            .terminal
+            .compare_exchange(2, 0, Ordering::AcqRel, Ordering::Acquire);
+        return Err(error);
     }
     let result = match state.engine() {
         Ok(engine) => {
@@ -161,7 +185,11 @@ fn engine_clean_exit(app: &tauri::AppHandle) {
             return;
         };
         state.terminal.store(1, Ordering::Release);
-        match state.testcard.close().await {
+        let closed = match finish_autostart_change(&app).await {
+            Ok(()) => state.testcard.close().await,
+            Err(error) => Err(error),
+        };
+        match closed {
             Ok(()) => {
                 state.allow_exit.store(true, Ordering::Release);
                 app.exit(0);
@@ -185,11 +213,14 @@ fn main() {
             tray::show_existing(app);
         }));
     #[cfg(windows)]
-    let builder = builder.plugin(
-        tauri_plugin_updater::Builder::new()
-            .pubkey(updater::PUBLIC_KEY.unwrap_or(""))
-            .build(),
-    );
+    let builder = builder
+        .plugin(tauri_plugin_opener::init())
+        .plugin(autostart::plugin())
+        .plugin(
+            tauri_plugin_updater::Builder::new()
+                .pubkey(updater::PUBLIC_KEY.unwrap_or(""))
+                .build(),
+        );
     let app = builder
         .setup(|app| {
             let root = app.path().resource_dir()?.join("engine");
@@ -199,6 +230,7 @@ fn main() {
                 engine_directory: root,
                 testcard: testcard::TestCard::new(),
                 updates: updater::Updater::new(),
+                autostart: autostart::Controller::new(),
                 terminal: AtomicU8::new(0),
                 allow_exit: AtomicBool::new(false),
                 tray: tray::Controller::new(),

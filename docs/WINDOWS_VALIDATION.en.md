@@ -101,6 +101,33 @@ its own temporary profiles and never enables an effect. Its test-only language
 override does not change Windows preferences. Qualify ordinary system detection
 separately. Do not run that helper unchanged against a configured update channel.
 
+### Startup and Tools commands
+
+Before testing, save the presence, type and data of only the `LumaTape` values in
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` and
+`HKCU\Software\Microsoft\Windows\CurrentVersion\Explorer\StartupApproved\Run`.
+Afterward, restore only entries changed by your test. Do not replace entire
+registry branches or overwrite changes made by others.
+
+1. After a clean NSIS installation, startup is off and the `Run` entry is absent.
+   Enable and disable "Tools → Start with Windows". Check the menu and registry:
+   the command contains the exact installed EXE path in quotes, including paths
+   with spaces and Cyrillic characters. Disabling removes the entry.
+2. Disable LumaTape in Task Manager. Reopening the menu and restarting the app
+   must only read that choice. Startup may be enabled again only by an explicit
+   user command; test that command separately.
+3. Launch a portable ZIP copy and an installed folder copied elsewhere. The menu
+   item explains the restriction. Neither copy may create startup registration
+   or replace the installed app's entry.
+4. Test updates with startup enabled and disabled, including a Task Manager
+   override: the choice must survive. Normal uninstall removes the owned entry.
+   A toggle queued when Quit is selected must be cancelled. If a registry write
+   has already started, shutdown must wait for it to finish.
+5. "Tools → Open effects folder" opens the current user's
+   `%LOCALAPPDATA%\LumaTape\Shaders` in File Explorer. Match the path to the engine's
+   library; opening it alone must not import or enable effects. "About LumaTape"
+   opens `https://github.com/aiwaki/lumatape` in the default browser.
+
 ## Effects and custom shaders
 
 Check Subtle CRT, CRT Classic, Soft TV, VHS Light and VHS Tape at native image

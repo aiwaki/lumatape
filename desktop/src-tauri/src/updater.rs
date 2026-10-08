@@ -10,6 +10,12 @@ use tauri::{AppHandle, Emitter};
 #[path = "updater_windows.rs"]
 mod windows;
 
+/// Shared installed-copy identity for features that require a stable location.
+#[cfg(windows)]
+pub(crate) fn is_installed() -> bool {
+    windows::installed_directory().is_ok()
+}
+
 pub const ENDPOINT: Option<&str> = option_env!("LUMATAPE_UPDATE_ENDPOINT");
 pub const PUBLIC_KEY: Option<&str> = option_env!("LUMATAPE_UPDATE_PUBLIC_KEY");
 const METADATA_LIMIT: usize = 64 * 1024;
@@ -52,7 +58,7 @@ fn fail(code: &'static str, ru: &str, en: &str) -> Failure {
     }
 }
 fn portable_reason() -> Failure {
-    fail("portable_install_disabled", "Обновление на месте доступно для установленной версии. Эта копия запущена из ZIP: скачайте новый ZIP и распакуйте отдельно.", "In-place updates require the installed version. This copy runs from a ZIP: download the new ZIP and extract it separately.")
+    fail("portable_install_disabled", "Обновление на месте доступно для установленной версии. Эта копия не распознана как установленная: скачайте новый ZIP и распакуйте в отдельную папку.", "In-place updates require the installed version. This copy was not recognized as an installed version. Download the new ZIP and extract it to a separate folder.")
 }
 fn cancelled() -> Failure {
     fail(
@@ -509,8 +515,8 @@ fn stable_version(value: &str) -> Result<semver::Version, Failure> {
     {
         return Err(fail(
             "update_version_unstable",
-            "Этот канал принимает только стабильные версии Windows.",
-            "This channel accepts stable Windows versions only.",
+            "Этот канал принимает только стабильные выпуски LumaTape для Windows.",
+            "This channel accepts only stable LumaTape releases for Windows.",
         ));
     }
     Ok(version)

@@ -7,6 +7,10 @@ Once checked and compiled, the effect appears under "Effect". If you have not se
 a game yet, the file is still saved to your library for later. A failed import
 leaves the working effect intact.
 
+"Tools → Open effects folder" opens `%LOCALAPPDATA%\LumaTape\Shaders` in File
+Explorer. Opening the folder does not import files. Add new or edited effects
+through "Add effect from file…".
+
 To create an effect with an AI assistant, use the prompt below and replace
 the effect description with your own. Save the answer as `.lumatape.glsl` and
 import it through the menu. LumaTape itself makes no AI requests.

@@ -40,8 +40,8 @@ impl TestCard {
             // Check under the same lock used by close(): no launch after its last check.
             if terminal.load(Ordering::Acquire) != 0 {
                 return Err(crate::i18n::text(
-                    "Выполняется завершение или установка обновления",
-                    "A terminal operation is in progress",
+                    "LumaTape закрывается или обновляется.",
+                    "LumaTape is closing or updating.",
                 )
                 .into());
             }

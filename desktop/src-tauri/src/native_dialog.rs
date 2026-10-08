@@ -25,11 +25,6 @@ pub fn write_clipboard(text: &str) -> Result<(), String> {
     platform::write_clipboard(text)
 }
 
-/// Fixed project URL only; no configuration or shader content can supply a target.
-pub fn open_repository() -> Result<(), String> {
-    platform::open_repository()
-}
-
 #[cfg(any(windows, test))]
 fn terminated_utf16(text: &str, limit: usize) -> Result<Vec<u16>, String> {
     let mut result = Vec::with_capacity(text.len().min(limit) + 1);
@@ -90,9 +85,6 @@ mod platform {
     pub(super) fn write_clipboard(_: &str) -> Result<(), String> {
         Err(unavailable())
     }
-    pub(super) fn open_repository() -> Result<(), String> {
-        Err(unavailable())
-    }
 }
 
 #[cfg(windows)]
@@ -106,33 +98,6 @@ mod platform {
 
     type Handle = *mut c_void;
     type Hresult = i32;
-
-    #[link(name = "shell32")]
-    extern "system" {
-        fn ShellExecuteW(
-            owner: Handle,
-            operation: *const u16,
-            file: *const u16,
-            parameters: *const u16,
-            directory: *const u16,
-            show: i32,
-        ) -> isize;
-    }
-
-    pub(super) fn open_repository() -> Result<(), String> {
-        // Shell extensions can require STA COM. Do not inherit the async pool's
-        // apartment or block the native tray event loop.
-        std::thread::Builder::new().name("lumatape-open-project".into()).spawn(|| {
-            check_hr(unsafe { CoInitializeEx(ptr::null_mut(), 0x2 | 0x4) }, "com_initialize")?;
-            let _apartment = Apartment;
-            let operation = terminated_utf16("open", 8)?;
-            let url = terminated_utf16("https://github.com/aiwaki/lumatape", 256)?;
-            let result = unsafe { ShellExecuteW(ptr::null_mut(), operation.as_ptr(), url.as_ptr(), ptr::null(), ptr::null(), 1) };
-            if result <= 32 {
-                Err(crate::localized!("Не удалось открыть GitHub в браузере (код {result}). Адрес: https://github.com/aiwaki/lumatape", "Could not open GitHub in your browser (code {result}). Address: https://github.com/aiwaki/lumatape"))
-            } else { Ok(()) }
-        }).map_err(|error| error.to_string())?.join().map_err(|_| crate::i18n::text("Не удалось открыть страницу проекта.", "Could not open the project page.").to_owned())?
-    }
 
     #[link(name = "user32")]
     extern "system" {

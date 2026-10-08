@@ -128,6 +128,7 @@ struct Handles {
     error: MenuItem<tauri::Wry>,
     confirm: MenuItem<tauri::Wry>,
     updates: MenuItem<tauri::Wry>,
+    autostart: CheckMenuItem<tauri::Wry>,
     sources: Section,
     effects: Section,
     settings: Submenu<tauri::Wry>,
@@ -263,8 +264,15 @@ fn build(app: &AppHandle) -> Result<Handles, String> {
         crate::i18n::text("Обновления…", "Updates…"),
         true,
     )?;
+    let autostart = CheckMenuItem::with_id(
+        app, "autostart",
+        crate::i18n::text("Запускать при входе в Windows", "Start with Windows"),
+        true, false, None::<&str>,
+    ).map_err(|e| e.to_string())?;
     service
         .append_items(&[
+            &autostart,
+            &PredefinedMenuItem::separator(app).map_err(|e| e.to_string())?,
             &item(
                 app,
                 "testcard",
@@ -281,6 +289,12 @@ fn build(app: &AppHandle) -> Result<Handles, String> {
                 app,
                 "diagnostics",
                 crate::i18n::text("Скопировать диагностику", "Copy diagnostics"),
+                true,
+            )?,
+            &item(
+                app,
+                "effects-folder",
+                crate::i18n::text("Открыть папку эффектов", "Open effects folder"),
                 true,
             )?,
             &updates,
@@ -343,6 +357,7 @@ fn build(app: &AppHandle) -> Result<Handles, String> {
         error,
         confirm,
         updates,
+        autostart,
         sources,
         effects,
         settings,
@@ -534,8 +549,26 @@ async fn read_data(app: &AppHandle) -> Result<Data, String> {
         model,
     })
 }
+fn autostart_event(app: &AppHandle) {
+    let target = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        let Some(state) = target.try_state::<Host>() else { return; };
+        // Read at application time so a queued refresh cannot overwrite a toggle.
+        let status = state.autostart.status(&target);
+        if let Some(handles) = state.tray.handles.lock().unwrap().as_ref() {
+            let _ = handles.autostart.set_checked(status.enabled);
+            // Unavailable copies retain a clickable explanation; no writes occur.
+            let _ = handles.autostart.set_enabled(
+                state.terminal.load(Ordering::Acquire) == 0
+                    && !state.tray.busy.load(Ordering::Acquire)
+            );
+        };
+    });
+}
+
 async fn refresh(app: &AppHandle) {
     updater_event(app);
+    autostart_event(app);
     let state = app.state::<Host>();
     if state.tray.refreshing.swap(true, Ordering::AcqRel) {
         return;
@@ -897,7 +930,7 @@ async fn perform(
         let initial = read_data(app).await?;
         check_intent(app, epoch, sequence, &initial)?;
         let sequence = Some(initial.model.emergency_sequence);
-        if matches!(&action,Action::Format(method) if method=="system")&&!confirm(crate::i18n::text("Windows временно сменит видеорежим. Подтвердите результат через меню «Подтвердить видеорежим» до истечения таймера; без подтверждения режим восстановится. Продолжить?", "Windows will temporarily change the display mode. Choose “Keep display mode” before the timer expires, or the previous mode will be restored. Continue?").into()).await?{return Ok(())}
+        if matches!(&action,Action::Format(method) if method=="system")&&!confirm(crate::i18n::text("Windows временно сменит видеорежим. В течение 15 секунд выберите «Подтвердить видеорежим» в меню трея; без подтверждения вернётся прежний режим. Продолжить?", "Windows will temporarily change the display mode. Choose “Keep display mode” in the tray menu within 15 seconds, or the previous mode will be restored. Continue?").into()).await?{return Ok(())}
         let data = read_data(app).await?;
         check_intent(app, epoch, sequence, &data)?;
         if action == Action::Power && data.model.wants_off {
@@ -993,9 +1026,33 @@ async fn perform(
                 .unwrap_or_else(|| crate::i18n::text("Ошибок нет.", "No errors.").into());
             show(message).await?;
         }
-        "about" => tauri::async_runtime::spawn_blocking(native_dialog::open_repository)
-            .await
-            .map_err(|error| error.to_string())??,
+        "autostart" => {
+            let target = app.clone();
+            tauri::async_runtime::spawn_blocking(move || {
+                let state = target.state::<Host>();
+                if state.terminal.load(Ordering::Acquire) != 0 {
+                    return Err(crate::i18n::text(
+                        "LumaTape закрывается или обновляется.",
+                        "LumaTape is closing or updating.",
+                    ).into());
+                }
+                state.autostart.toggle(&target, &state.terminal).map(|_| ())
+            }).await.map_err(|error| error.to_string())??;
+        }
+        "about" | "effects-folder" => {
+            let target = app.clone();
+            let folder = id == "effects-folder";
+            tauri::async_runtime::spawn_blocking(move || {
+                if target.state::<Host>().terminal.load(Ordering::Acquire) != 0 {
+                    return Err(crate::i18n::text(
+                        "LumaTape закрывается или обновляется.",
+                        "LumaTape is closing or updating.",
+                    ).into());
+                }
+                if folder { crate::links::open_effects_folder(&target) }
+                else { crate::links::open_repository(&target) }
+            }).await.map_err(|error| error.to_string())??;
+        }
         _ => {
             return Err(
                 crate::i18n::text("Неизвестная команда меню", "Unknown menu command").into(),

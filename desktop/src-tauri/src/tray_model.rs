@@ -156,8 +156,8 @@ pub fn parse_action(id: &str) -> Option<Action> {
 }
 fn bad(field: &str) -> String {
     crate::localized!(
-        "Движок вернул неполное или неизвестное состояние ({field}). Обновите меню.",
-        "The engine returned an incomplete or unknown state ({field}). Refresh the menu."
+        "Движок вернул неполное или неизвестное состояние ({field}). Подождите немного и снова откройте меню.",
+        "The engine returned an incomplete or unknown state ({field}). Wait a moment and reopen the menu."
     )
 }
 fn string<'a>(value: &'a Value, pointer: &str) -> Result<&'a str, String> {
@@ -492,13 +492,13 @@ fn backend_check(c: &Value, snapshot: &Value) -> Result<(), String> {
     let cpu = snapshot["runtime"]["compatibility"]["state"] == "unavailable";
     match c["capture"]["transfer"].as_str() {
         Some("gpu") if gpu => Err(text(
-            "Обработка через GPU недоступна. Выберите автоматический или совместимый режим.",
-            "GPU processing is unavailable. Choose Automatic or Compatible CPU.",
+            "Обработка через GPU недоступна. Выберите «Автоматически» или режим совместимости CPU.",
+            "GPU processing is unavailable. Choose Automatic or CPU compatibility mode.",
         )
         .into()),
         Some("compatibility") if cpu => Err(text(
-            "Совместимый режим CPU недоступен.",
-            "Compatible CPU processing is unavailable.",
+            "Режим совместимости CPU недоступен.",
+            "CPU compatibility mode is unavailable.",
         )
         .into()),
         Some("auto") if gpu && cpu => Err(text(
@@ -570,8 +570,8 @@ pub fn plan(
                 .iter()
                 .find(|s| source_key(s).as_ref() == Ok(key))
                 .ok_or(text(
-                    "Окно закрыто или изменилось. Обновите список окон.",
-                    "The window closed or changed. Refresh the window list.",
+                    "Окно закрыто или изменилось. Подождите немного, снова откройте меню «Игра» и выберите окно.",
+                    "The window closed or changed. Wait a moment, reopen the Game menu, and select a window again.",
                 ))?;
             config["target"] = json!({"kind":"window","monitor":0,"window_title":chosen["title"]});
             source = Some(chosen.clone());
@@ -1047,8 +1047,8 @@ pub fn build(snapshot: &Value, sources: &Value, shaders: &Value) -> Result<MenuM
                     (
                         "full-compatibility",
                         text(
-                            "Совместимый CPU · до 30 FPS",
-                            "Compatible CPU · up to 30 FPS",
+                            "Режим совместимости CPU · до 30 FPS",
+                            "CPU compatibility mode · up to 30 FPS",
                         ),
                     ),
                     (
@@ -1086,14 +1086,14 @@ pub fn build(snapshot: &Value, sources: &Value, shaders: &Value) -> Result<MenuM
         ),
         "starting" => text("Подготовка", "Starting"),
         "ready" => text("Готов", "Ready"),
-        "paused-settings" => text("Настройки открыты", "Settings open"),
+        "paused-settings" => text("Пауза · вернитесь в игру", "Paused · return to the game"),
         "paused-stale" => text("Захват приостановлен", "Capture paused"),
         "waiting-source" => text("Ожидает окно игры", "Waiting for game window"),
-        "paused-focus" => text("Ожидает фокус игры", "Waiting for game focus"),
+        "paused-focus" => text("Вернитесь в игру", "Return to the game"),
         "paused-moving" => text("Пауза при движении", "Paused while moving"),
         "waiting-frame" => text("Ожидает свежий кадр", "Waiting for a fresh frame"),
-        "source-closed" => text("Игра закрыта", "Game closed"),
-        "error" => text("Не удалось запустить", "Failed to start"),
+        "source-closed" => text("Окно игры закрыто", "Game window closed"),
+        "error" => text("Ошибка", "Error"),
         "recovery-error" => text("Нужно восстановление", "Restoration required"),
         _ => unreachable!(),
     };
@@ -1842,6 +1842,6 @@ mod tests {
         assert_ne!(ru_bad, en_bad);
         assert!(ru_bad.contains(field));
         assert!(en_bad.contains(field));
-        assert!(en_bad.contains("Refresh the menu."));
+        assert!(en_bad.contains("Wait a moment and reopen the menu."));
     }
 }
