@@ -2,11 +2,13 @@
 
 [Русский](README.md) · English
 
-Developer helper for the real Go engine. Run in an interactive Windows desktop,
+This developer tool checks the Go engine. Run it in an interactive Windows desktop,
 with a separately started test card and no other LumaTape engine. The engine
 executable must have its normal GLFW/capture DLLs beside it. The lifecycle/EOF
 cases do not automate input. No case changes the system display mode or modifies
 the main user profile.
+
+## Startup and diagnostics
 
 ```powershell
 .\windows-control-smoke.exe --engine C:\LumaTape\lumatape-controlled.exe --target-pid 1234 --case lifecycle --expect-gpu-unavailable --output C:\LumaTape\ipc-lifecycle
@@ -15,7 +17,8 @@ the main user profile.
 ```
 
 Use the actual test card PID. If that process has multiple eligible windows,
-also pass `--target-title "VHS test card"` with its exact current title. Omit
+also pass `--target-title "LumaTape test card"`, using its exact current title
+for the scene's language. Omit
 `--expect-gpu-unavailable` on a GPU where the native interop path may work; this
 flag explicitly requires GPU rejection and is intended for the Parallels fixture.
 Without `--output`, artifacts go to a new private temporary directory.
@@ -36,6 +39,8 @@ states. Compare a direct launch of the same engine from the same directory only
 after the prior helper has exited and its child cleanup is known. Do not change
 the GPU backend or assume an ARM/driver failure from missing `ready` alone.
 
+## Lifecycle and EOF
+
 The lifecycle case checks correlated protocol replies, exact live source
 identity, explicit Full CPU plus rounded screen and actual 4:3 client resize,
 configuration preservation after rejected GPU/reload requests, real renderer
@@ -48,10 +53,12 @@ Artifacts include a private `config.json`, engine diagnostic log/stderr, compact
 protocol log, and preview PNGs. The output JSONL records assertions, not evidence
 of live foreground rendering: the helper deliberately does not focus the target.
 Full capture visibility, mouse alignment, native GPU support, and physical display
-mode restoration require their separate Windows tests. Each run temporarily
+mode restoration require their separate Windows tests. These cases temporarily
 resizes the chosen test card and restores it through the engine's cleanup path.
 
-The explicit `input` case invokes the separately built
+## Input and hotkeys
+
+The `input` case invokes the separately built
 `scripts/windows-ui-smoke/cmd/source-input` helper; the main module has no makc
 dependency. Both helper and testcard paths must be absolute. That helper validates
 the exact live PID/executable and `LumaTape.Native.TestCard` window class, checks
@@ -75,21 +82,23 @@ fail the case. An input helper timeout is reported without force-killing it whil
 deferred key release may still be necessary. This proves Windows SendInput delivery
 on that desktop, not physical Mac keyboard/Parallels key translation.
 
-Fixture regression: child processes use `CREATE_NO_WINDOW` without Go's
+Child processes must use `CREATE_NO_WINDOW` without Go's
 `SysProcAttr.HideWindow`. `HideWindow` adds `STARTF_USESHOWWINDOW/SW_HIDE`, which
 overrides the child's first `ShowWindow` call. For source-input, that call targets
-the testcard: the faulty launcher made its HWND foreground but invisible, leaving
-the engine correctly paused with no Full frames. Do not reintroduce that flag to
+the testcard: launching with this flag makes its HWND foreground but invisible,
+leaving the engine paused with no Full frames. Do not use that flag to
 suppress consoles; the separate creation flag already does that. The source
 visibility/backend assertion remains required.
 
-The `shaders` case uses the real renderer and bundled-format examples:
+## Shaders
+
+The `shaders` case uses the real renderer and examples in LumaTape format:
 
 ```powershell
 .\windows-control-smoke.exe --engine C:\LumaTape\lumatape-engine.exe --target-pid 1234 --case shaders --expect-gpu-unavailable --shader-file C:\LumaTape\examples\shaders\amber-crt.lumatape.glsl --secondary-shader-file C:\LumaTape\examples\shaders\cold-bleed.lumatape.glsl --output C:\LumaTape\shader-smoke
 ```
 
-This fixture requires the known unsupported-interop Parallels environment. It
+This case requires the Parallels test environment with no interop support. It
 keeps `capture.transfer=auto` in the saved config and requires a successful CPU
 Open, exact shader defaults and actual window 4:3. Import runs real GLSL compile;
 a parser-valid body with an undefined function must return `shader_compile_failed`
@@ -99,7 +108,7 @@ must match. Decoded PNG pixels must show exact 0% bypass, a visible 100% differe
 and opaque alpha. Previewing Cold Bleed must leave the live Amber program/config
 unchanged. Out-of-range parameters and a warp shader under mouse-exact input must
 be rejected atomically. Emergency restores the exact original rectangle, rejects
-a stale Apply, and Quit requires cleanup ACK followed by exit 0.
+a stale Apply, and Quit requires cleanup acknowledgement followed by exit 0.
 
 Only this child receives `LOCALAPPDATA=<output>\local-app-data`: its imported
 shader library and diagnostics stay separate from the user's real library.
@@ -110,8 +119,10 @@ testcard and an actual Full-active assertion. The PNGs remain synthetic renderer
 previews, not captured game screenshots. `shader-summary.json` distinguishes
 that optional foreground evidence; final STOP/Quit assertions are in JSONL.
 
-The explicit `presets` case qualifies all five builtins on the unsupported-GPU
-Parallels fixture without changing the testcard size or display mode:
+## Built-in presets
+
+The `presets` case checks all five built-in effects in the Parallels test
+environment with no GPU interop, without changing the testcard size or display mode:
 
 ```powershell
 .\windows-control-smoke.exe --engine C:\LumaTape\lumatape-engine.exe --target-pid 1234 --case presets --expect-gpu-unavailable --input-helper C:\LumaTape\lumatape-source-input.exe --target-exe C:\LumaTape\lumatape-testcard.exe --output C:\LumaTape\presets-smoke
@@ -126,7 +137,9 @@ The six `*-synthetic-preview.png` files use the renderer's test scene: they are
 only after emergency restoration, stale-Apply rejection and clean Quit/exit 0.
 Failed cases also attempt the same cleanup before the outer EOF fallback.
 
-Build from the repository root:
+## Build
+
+Run from the repository root:
 
 ```sh
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o artifacts/polish-validation/windows-control-smoke.exe ./scripts/windows-control-smoke

@@ -2,15 +2,17 @@
 
 [Русский](README.md) · English
 
-`lumatape_capture.dll` is an optional x64 C++/WinRT bridge. The host remains Go/OpenGL
+`lumatape_capture.dll` is an optional x64 C++/WinRT bridge. The host uses Go/OpenGL
 3.3. Build it through the root CMake project with Visual Studio 2022 C++ desktop
 tools and Windows SDK **10.0.26100 or newer**, using C++20. Windows 10 version 2004, build
 19041, is the minimum runtime because captured-cursor suppression first appears
 there. The static MSVC runtime avoids a separate redistributable DLL dependency.
 
-The implementation supports **SDR top-level window capture only**. Monitor
-capture is absent. The default GPU transfer requires WGC and the exact `WGL_NV_DX_interop` plus
-`WGL_NV_DX_interop2` extension tokens and entry points must be present. Hardware
+## Capture and GPU transfer
+
+The bridge supports **SDR top-level window capture only**. It does not capture
+monitors. The default GPU transfer requires WGC, the exact `WGL_NV_DX_interop` and
+`WGL_NV_DX_interop2` extension tokens, and their entry points. Hardware
 adapters are probed by creating the same BGRA D3D11 texture used at runtime,
 registering it with the current GL context, locking it, checking its dimensions,
 and unlocking it. A matching vendor name or an extension string alone does not
@@ -26,7 +28,9 @@ discarding the older one. No additional frame queue, rendering thread or
 DispatcherQueue is created by this library. The WGC internal worker uses the
 multithread-protected D3D immediate context.
 
-`vhs_capture_open_ex` adds an explicit transfer selection without changing ABI
+## CPU transfer
+
+`vhs_capture_open_ex` selects the transfer method explicitly without changing ABI
 version 1 or the 56-byte frame. Transfer `0` is the default GPU path (also used
 by the original `vhs_capture_open`); transfer `1` is **Compatibility (CPU)**.
 There is no automatic fallback. Compatibility still captures the selected HWND
@@ -49,13 +53,15 @@ waits for the next acquire. This avoids uploading two full images into the same
 GL texture before either has been presented. It is a transfer-work bound, not a
 claim that the virtual driver always meets the host's frame-age deadline.
 
-The additive `vhs_capture_get_stats` export takes a 40-byte `VhsCaptureStats`.
+The additional `vhs_capture_get_stats` export takes a 40-byte `VhsCaptureStats`.
 For the most recent uploaded compatibility frame it reports readback wait
 (copy submission to successful Map, including polling/scheduling), upload-call
 wall time, successful Map-through-Unmap wall time, and client pixel bytes.
 These are not GPU timings or CPU profiler samples. GPU mode and startup report
 zero transfer metrics. The acquire/release pairing remains required in both
 modes; compatibility uses a logical ownership guard instead of an NV lock.
+
+## Telemetry
 
 The optional `vhs_capture_get_telemetry_v1` export accepts the separate 136-byte
 `VhsCaptureTelemetryV1`; the existing ABI version, frame and stats layouts do
@@ -74,6 +80,8 @@ copy, but do not prove why a source stopped producing content. GPU mode has
 only acquire duration/sequence/serial; CPU phases remain zero/sentinels. Hosts
 must treat a missing optional export as unavailable diagnostics for old DLLs.
 
+## ABI and resource ownership
+
 The host must use per-monitor DPI awareness and keep every bridge call on its
 initial rendering thread with the original WGL context current. Close capture
 before destroying that context. See [capture.h](https://github.com/aiwaki/lumatape/blob/main/native/capture/capture.h) for the C ABI. It is
@@ -89,6 +97,8 @@ and exit without unloading the active DLL or destroying its GL context first.
 The same rule applies if Open reports an error but returns a non-null handle:
 that means partial-initialization cleanup failed. The handle stays alive for a
 Close retry; it must not be silently discarded by the language binding.
+
+## Geometry, color and source state
 
 Textures are client-area crops in physical pixels. WGC's captured extent must
 match either the current client area or DWM's extended frame bounds; arbitrary
@@ -114,7 +124,9 @@ Color state is rechecked when source geometry changes and once per second, so a
 system color toggle can take up to one second to stop Full output. There is no
 HDR conversion or automatic change to Windows HDR settings.
 
-## Validation status
+## Validation and recorded results
+
+### Cross-builds
 
 The complete root CMake Release project was cross-compiled and linked on the
 macOS development machine with clang-cl/LLD 22.1.8, target
@@ -130,24 +142,27 @@ This is **not** a Windows execution, native MSVC build or GPU runtime test.
 The older SDK19041's bundled C++/WinRT headers failed inside their
 coroutine/strict-lookup support; the modern **build SDK** requirement is separate
 from the 19041 runtime floor.
+
+The compatibility extension and its expanded ABI smoke were separately
+cross-compiled and linked with the same toolchain, four incremental steps with
+zero diagnostics. That DLL build has seven exports (the five original functions plus
+`open_ex` and `get_stats`). Logs, source hashes and PE inspection for this
+extension are in `artifacts/full-validation/native`; runtime evidence is kept
+separately in the validation document.
+
+### ABI and Windows validation
+
 With `BUILD_TESTING=ON`, `ctest --test-dir build/native -C Release` runs
 `capture_abi_smoke` on Windows: DLL loading/exports, frame field offsets, null
 close idempotence, failed-open cleanup and bounded error buffers. It creates no
 window or GPU device and cannot establish capture, color or gameplay support.
 This cross-build compiled and linked the EXE without executing it. Separate
-Windows/VM results belong in [WINDOWS_VALIDATION.md](../../docs/WINDOWS_VALIDATION.md).
-The C++ implementation needs the Windows CI/build gate and real hardware tests:
+Windows/VM results are recorded in [Windows validation](../../docs/WINDOWS_VALIDATION.en.md).
+The C++ bridge needs Windows CI and build checks, plus real hardware tests:
 BGRA/color/orientation, hybrid adapters, bounded frame age, resize/DPI, capture
 failure, Alt+Tab, source close, cursor, and repeated open/close. Devices without
 the required interop must produce the explicit availability error. Verify the
 driver behavior before treating Full mode as qualified for gameplay.
-
-The compatibility extension and its expanded ABI smoke were separately
-cross-compiled and linked with the same toolchain, four incremental steps with
-zero diagnostics. Its DLL has seven exports (the five original functions plus
-`open_ex` and `get_stats`). Logs, source hashes and PE inspection for this
-extension are in `artifacts/full-validation/native`; runtime evidence is kept
-separately in the validation document.
 
 ## API references
 

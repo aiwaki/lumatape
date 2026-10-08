@@ -1,90 +1,108 @@
-# Parallels smoke protocol
+# Протокол smoke-проверки в Parallels
 
-Parallels is useful for Windows menu, CPU capture and input regression checks.
-It does not establish physical GPU interop, monitor behavior or compatibility
-with arbitrary games. Use this alongside the [Windows protocol](WINDOWS_VALIDATION.md)
-and record the exact release and hashes for each run.
+[Русский](PARALLELS_SMOKE.md) | [English](PARALLELS_SMOKE.en.md)
 
-## Setup
+Parallels подходит для регрессионных проверок меню Windows, захвата через CPU и
+ввода. Такие проверки не подтверждают аппаратный GPU interop, поведение монитора
+или совместимость с произвольными играми. Используйте этот документ вместе с
+[протоколом Windows](WINDOWS_VALIDATION.md); для каждого прогона записывайте точный
+релиз и хеши.
 
-Use the Windows interactive desktop with a disposable LumaTape profile and the
-bundled test scene. Keep existing profiles, games and unrelated processes intact.
-Record Windows architecture, Parallels/Tools and display-driver versions, physical
-resolution, DPI and refresh rate. The release is Windows x64; running it on
-Windows ARM uses Windows' compatibility layer, not a native ARM64 build.
+## Подготовка
 
-Do not restart the VM/Tools or change host preferences as an automatic workaround.
-For physical mouse tests, record Parallels' Smart Mouse setting. In the development
-VM, the user confirmed acceleration and sticky clicks disappeared with **Don't
-optimize for games**. This is a VM-specific observation, not a reason for LumaTape
-to modify that setting. A different game may require a different host policy.
+Используйте интерактивный рабочий стол Windows, одноразовый профиль LumaTape и
+комплектную тестовую сцену. Сохраняйте существующие профили, игры и посторонние
+процессы. Запишите архитектуру Windows, версии Parallels/Tools и драйвера дисплея,
+физическое разрешение, DPI и частоту обновления. Релиз предназначен для Windows
+x64. На Windows ARM он работает через слой совместимости Windows, а не как
+нативная сборка ARM64.
 
-If guest execution fails, distinguish a tool failure from an application failure.
-A background Session 0 process, stale screenshot or completed scheduled task does
-not establish GUI success. Helpers must validate the intended session, executable,
-process creation time and HWND before interacting.
+Не перезапускайте VM/Tools и не меняйте настройки хоста как автоматический способ
+устранить проблему. Для проверок физической мыши запишите настройку Smart Mouse
+в Parallels. В рабочей VM пользователь подтвердил, что ускорение и залипание
+кликов исчезли при выборе **Don't optimize for games**. Это наблюдение относится
+к конкретной VM и не даёт LumaTape права менять настройку. Для другой игры может
+потребоваться другая политика хоста.
 
-## Short regression run
+Если выполнение в гостевой системе не удалось, отделяйте сбой инструмента от
+сбоя приложения. Фоновый процесс в Session 0, старый снимок экрана или завершённое
+задание планировщика не подтверждают работу GUI. Перед взаимодействием
+вспомогательные инструменты должны проверить нужную сессию, исполняемый файл,
+время создания процесса и HWND.
 
-1. Extract a new portable candidate to a path containing spaces and non-ASCII
-   characters. Match its checksum; launch it normally. Confirm one native tray,
-   one engine and no WebView/panel. Repeat launch and confirm no extra instance.
-2. Inspect RU/EN menu text, version above Quit, shortcut descriptions, actual
-   enabled/check states, and readable error dialogs. Test language inheritance in
-   a newly launched testcard; an older already-running testcard is not translated.
-3. Open Tools → Test scene, select it under Game and enable VHS Tape. Automatic
-   processing may choose CPU only after a classified GPU-interop failure. Record
-   the actual backend and reason. A present DLL does not establish GPU support.
-4. Compare all five effects and three screen shapes at native scale. Check live
-   frame freshness, HUD corners and readable text. Import a valid example shader,
-   then reject an invalid one while keeping the working effect.
-5. Move/resize the source, minimize/restore, switch focus and test fullscreen with
-   F11, Alt+Enter and Escape. Require fresh recovery without a stale rectangle,
-   unintended focus transfer or opaque error surface.
-6. With Accurate clicks and Curved CRT, test target hover/click, drag and wheel.
-   Disable while a button is held using the identity-bound input helper; verify
-   release and ordinary cursor restoration. Check edges in both windowed and
-   fullscreen presentations.
-7. Test Ctrl+Shift+9 toggle and Ctrl+Shift+0 emergency off, or the profile's saved
-   bindings. Registration and receipt are separate checks. Guest-injected input
-   and physical keyboard delivery must be reported separately.
-8. Quit normally, verify engine cleanup and preserved settings, then restart.
-   Do not change the game's selected input mode or profile merely to simplify
-   the test. No source window should be closed unless it belongs to this run.
+## Короткий регрессионный прогон
 
-Masks and automatic game-window resizing are retired tray choices. Do not use
-old Crop/window-format scripts as proof of the current normal scenario. Prefer
-selecting 4:3 inside the test game. System resolution restoration and installed
-N→N+1 updates are separate explicit protocols, not steps in this short run.
+1. Распакуйте новый переносимый кандидат в путь с пробелами и символами вне ASCII.
+   Сверьте контрольную сумму и запустите его обычным способом. Проверьте один
+   нативный трей, один движок и отсутствие WebView/панели. Повторите запуск и
+   убедитесь, что новый экземпляр не появился.
+2. Проверьте текст меню RU/EN, версию над пунктом выхода, описания сочетаний клавиш,
+   фактическую доступность и отметки пунктов, читаемость диалогов ошибок. Проверьте
+   наследование языка новой тестовой сценой; уже запущенная сцена не переводится.
+3. Откройте «Сервис → Тестовая сцена», выберите её в меню «Игра» и включите VHS Tape.
+   Автоматическая обработка может выбрать CPU только после распознанной ошибки
+   GPU interop. Запишите фактический бэкенд и причину выбора. Наличие DLL не
+   подтверждает поддержку GPU.
+4. Сравните все пять эффектов и три формы экрана в исходном масштабе. Проверьте
+   свежесть кадров, углы HUD и читаемость текста. Импортируйте корректный пример
+   шейдера, затем отклоните некорректный, сохранив рабочий эффект.
+5. Перемещайте и меняйте размер источника, сворачивайте и восстанавливайте его,
+   переключайте фокус и проверяйте полноэкранный режим через F11, Alt+Enter и
+   Escape. Изображение должно восстанавливаться со свежими кадрами, без старого
+   прямоугольника, непреднамеренного перевода фокуса и непрозрачной поверхности
+   при ошибке.
+6. В режимах «Точные клики» и «Выпуклый CRT» проверьте наведение, клики,
+   перетаскивание и колесо. Через инструмент ввода, привязанный к идентичности
+   процесса, отключите эффект при удерживаемой кнопке; проверьте её отпускание
+   и возврат обычного курсора. Проверьте края окна и полноэкранного изображения.
+7. Проверьте Ctrl+Shift+9 для переключения и Ctrl+Shift+0 для аварийного отключения
+   либо сохранённые сочетания профиля. Регистрация и получение команды — отдельные
+   проверки. Результаты внедрённого ввода в гостевой системе и физической
+   клавиатуры записывайте отдельно.
+8. Выйдите обычным способом, проверьте очистку движка и сохранение настроек, затем
+   запустите приложение снова. Не меняйте выбранный режим ввода игры или профиль
+   только ради упрощения проверки. Закрывать окно-источник можно, только если оно
+   принадлежит этому прогону.
 
-## Input and cursor evidence
+Маски и автоматическое изменение размера игрового окна убраны из трея. Старые
+скрипты Crop/формата окна не подтверждают текущий обычный сценарий. Предпочтительно
+выбирать 4:3 внутри тестовой игры. Восстановление системного разрешения и
+обновление установленной версии N→N+1 проверяются по отдельным явно выбранным
+протоколам и не входят в короткий прогон.
 
-The [Windows UI helpers](../scripts/windows-ui-smoke/README.md) check actual
-Win32 events and own testcard counters. They do not change mouse sensitivity,
-Parallels configuration or host keyboard mappings. Physical Mac/Parallels cursor
-doubling may be invisible in a guest screenshot because the host cursor is not
-part of captured Windows pixels. A clean screenshot cannot disprove that symptom.
+## Свидетельства ввода и курсора
 
-For repeatable observation, use the native pointer-test scene and fullscreen
-helper. Preserve the original focus, bounds and profile when a probe fails.
-Distinguish projected-cursor geometry, cursor visibility ordering and capture
-freshness; passing one does not prove the others or the host compositor.
+[Инструменты Windows UI](../scripts/windows-ui-smoke/README.md) проверяют реальные
+события Win32 и счётчики собственной тестовой сцены. Они не меняют
+чувствительность мыши, конфигурацию Parallels или раскладку клавиш хоста.
+Двоение физического курсора Mac/Parallels может не попасть на снимок гостевой
+системы: курсор хоста не входит в захваченные пиксели Windows. Чистый снимок
+экрана не опровергает этот симптом.
 
-Alt on a Mac keyboard corresponds to Option, and Control is not Command. F-key
-delivery may also depend on Fn and Parallels. The default Ctrl+Shift+9/0 pair
-avoids those keys, but only a physical test can confirm delivery from that host.
+Для повторяемого наблюдения используйте нативную сцену проверки указателя и
+инструмент полноэкранной проверки. При неудачной пробе сохраняйте исходный фокус,
+границы окна и профиль. Различайте геометрию проекции курсора, порядок смены его
+видимости и свежесть захвата. Успешная проверка одного свойства не подтверждает
+остальные или работу композитора хоста.
 
-## Report boundaries
+Alt на клавиатуре Mac соответствует Option, а Control — не Command. Передача
+F-клавиш также может зависеть от Fn и Parallels. Стандартная пара Ctrl+Shift+9/0
+обходится без этих клавиш, но только физическая проверка подтверждает доставку
+команды с конкретного хоста.
 
-Save local JSON/log receipts and the real exit code for each owned helper. Keep
-screenshots optional and scoped to the test scene. Do not publish unredacted
-window titles, local paths, profiles or desktop captures with the release.
+## Границы отчёта
 
-Classify the outcome separately for native menu/language, Full CPU rendering,
-input, source lifecycle, display recovery and updates. Note interrupted focus,
-VM stalls and untested items. Performance runs require warm-up and sustained
-capture without PNG readback. The CPU ceiling of 30 FPS is not a measurement.
+Сохраняйте локальные JSON-отчёты, логи и настоящий код выхода каждого запущенного
+вами инструмента. Снимки экрана необязательны; ограничивайте их тестовой сценой.
+Не публикуйте с релизом заголовки окон, локальные пути, профили и снимки рабочего
+стола без удаления приватных данных.
 
-A successful Parallels run remains **Windows CPU compatibility evidence**.
-Hardware GPU interop, physical display/DPI transitions, host input and real-game
-compatibility require their own qualification.
+Записывайте отдельные результаты для нативного меню и языка, рендера Full CPU,
+ввода, жизненного цикла источника, восстановления дисплея и обновлений. Отмечайте
+потерю фокуса, зависания VM и непроверенные пункты. Для замеров производительности
+нужны прогрев и длительный захват без чтения PNG. Предел CPU в 30 FPS не является
+результатом замера.
+
+Успешный прогон Parallels подтверждает **совместимость Windows CPU** в проверенных
+условиях. Аппаратный GPU interop, физические переходы дисплея/DPI, ввод хоста и
+совместимость с реальными играми требуют отдельных проверок.

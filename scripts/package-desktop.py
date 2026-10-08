@@ -208,7 +208,7 @@ def copy_support_files(destination: Path, licenses: Path):
         dest = destination / name
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, dest)
-    for name in ('README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'PARALLELS_SMOKE.md', 'ARCHITECTURE.md', 'PRIOR_ART_AUDIT.md', 'SHADER_SPEC.md', 'UPDATES.md'):
+    for name in ('README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'WINDOWS_VALIDATION.en.md', 'PARALLELS_SMOKE.md', 'PARALLELS_SMOKE.en.md', 'ARCHITECTURE.md', 'ARCHITECTURE.en.md', 'PRIOR_ART_AUDIT.md', 'PRIOR_ART_AUDIT.en.md', 'SHADER_SPEC.md', 'SHADER_SPEC.en.md', 'UPDATES.md', 'UPDATES.en.md'):
         target = destination / 'docs' / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / 'docs' / name, target)

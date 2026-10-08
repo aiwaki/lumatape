@@ -1,38 +1,43 @@
-# LumaTape signed updates
+# Подписанные обновления LumaTape
 
-The tray checks a configured channel once, 20 seconds after startup, and on demand.
-An available version never installs automatically: the user must confirm. Builds
-without the embedded endpoint **and** public key report that the channel is not
-configured and send no update requests. No GitHub release or signing key is
-created by normal builds.
+[Русский](UPDATES.md) | [English](UPDATES.en.md)
 
-## Supported installation
+Трей проверяет настроенный канал один раз через 20 секунд после запуска и по
+запросу. Доступная версия никогда не устанавливается автоматически: нужно
+подтверждение пользователя. Сборки без встроенных адреса **и** публичного ключа
+сообщают, что канал не настроен, и не отправляют запросы обновления. Обычная сборка
+не создаёт релиз GitHub или ключ подписи.
 
-In-place updates support the **current-user x64 NSIS installation**. The updater
-compares the real running executable with NSIS's two HKCU installation records,
-its version and uninstaller. A portable ZIP can discover a release but cannot run
-the installer; extract a new portable ZIP separately. Copying an installed folder
-elsewhere does not turn it into a supported installation.
+## Поддерживаемая установка
 
-The updater admits stable versions newer than the running version, for
-`windows-x86_64` only. The exact asset name is
-`LumaTape_<version>_x64-setup.exe` under the immutable release tag `v<version>` in
-`aiwaki/lumatape`. The discovery endpoint is
+Обновление на месте поддерживается для **NSIS-установки x64 текущего пользователя**.
+Модуль обновлений сравнивает фактически запущенный исполняемый файл с двумя
+записями установки NSIS в HKCU, версией и деинсталлятором. Переносимый ZIP может
+найти релиз, но не может запустить установщик; новый переносимый ZIP нужно
+распаковать отдельно. Копирование установленной папки в другое место не делает
+её поддерживаемой установкой.
+
+Модуль обновлений допускает стабильные версии новее запущенной и только для
+`windows-x86_64`. Точное имя файла — `LumaTape_<version>_x64-setup.exe` под
+неизменяемым тегом релиза `v<version>` в `aiwaki/lumatape`. Адрес поиска обновления:
 `https://github.com/aiwaki/lumatape/releases/latest/download/latest.json`.
-Official release builds embed this endpoint and the LumaTape public key in
-`desktop/src-tauri/updater.pub`; ordinary unsigned developer builds remain unconfigured.
+Официальные релизные сборки содержат этот адрес и публичный ключ LumaTape из
+`desktop/src-tauri/updater.pub`; обычные неподписанные сборки разработчика остаются
+без настроенного канала.
 
-## Local release preparation
+## Локальная подготовка релиза
 
-Use a **dedicated LumaTape key**, supplied by the release owner. Never use the
-Slipstream key. The private key stays in the release process environment; these
-scripts neither generate nor save it. Follow Tauri's signer instructions when
-establishing a channel for the first time. The public-key file contains the base64
-value produced by Tauri's signer.
+Используйте **отдельный ключ LumaTape**, предоставленный владельцем релиза.
+Никогда не используйте ключ Slipstream. Закрытый ключ остаётся в окружении
+процесса выпуска; эти скрипты его не создают и не сохраняют. При первой настройке
+канала следуйте инструкциям Tauri signer. Файл публичного ключа содержит значение
+base64, полученное от Tauri signer.
 
-Before a release, update the version consistently in Cargo.toml, package.json and
-tauri.conf.json. On the Windows build host with the normal native dependencies,
-NSIS toolchain and Python `cryptography` package available:
+Перед релизом согласованно обновите версию в Cargo.toml, package.json и
+tauri.conf.json. Приведённые ниже команды — примеры для версии 0.3.1; для нового
+выпуска укажите его версию и время публикации. На Windows-хосте сборки должны быть
+доступны обычные нативные зависимости, инструменты NSIS и пакет Python
+`cryptography`:
 
 ```powershell
 # TAURI_SIGNING_PRIVATE_KEY and, if needed, TAURI_SIGNING_PRIVATE_KEY_PASSWORD
@@ -43,8 +48,8 @@ NSIS toolchain and Python `cryptography` package available:
   -NativeFrom '<native-input>' -LicenseFrom '<license-input>'
 ```
 
-On macOS/Linux with cargo-xwin, LLVM, NSIS, and an explicit previously built
-native install directory, the equivalent command is:
+На macOS/Linux с cargo-xwin, LLVM, NSIS и явно заданным каталогом ранее собранных
+нативных компонентов эквивалентная команда:
 
 ```sh
 # Signing environment supplied privately; never commit the private key.
@@ -52,16 +57,17 @@ native install directory, the equivalent command is:
 sh scripts/build-update.sh /absolute/native-install 0.3.1
 ```
 
-The cross-build uses the committed `desktop/src-tauri/updater.pub`. Both build
-paths include verified dependency notices and public documentation in NSIS.
-These minisign signatures authenticate updates; they are not an Authenticode
-certificate and do not establish a trusted Windows publisher.
+Кросс-сборка использует файл `desktop/src-tauri/updater.pub` из репозитория. Оба
+пути сборки включают в NSIS проверенные лицензионные уведомления зависимостей и
+публичную документацию. Подписи minisign подтверждают подлинность обновлений;
+они не заменяют сертификат Authenticode и не подтверждают доверенного издателя
+Windows.
 
-This builds locally, embeds the public trust configuration, generates Tauri NSIS
-updater artifacts, verifies the actual minisign signature and the PE's file/product
-version resources, and writes a bounded
-`latest.json` plus a SHA256 receipt. It does **not** upload or publish anything.
-Already signed assets can be admitted without a rebuild:
+Скрипт выполняет локальную сборку, встраивает публичные настройки доверия, создаёт
+артефакты обновления Tauri NSIS, проверяет настоящую подпись minisign и ресурсы
+версии файла/продукта в PE, затем записывает `latest.json` с ограничением размера
+и отчёт SHA256. Ничего не загружается и не публикуется. Уже подписанные файлы
+можно проверить и включить в индекс без повторной сборки:
 
 ```sh
 python3 scripts/prepare-update.py \
@@ -71,62 +77,72 @@ python3 scripts/prepare-update.py \
   --published-at 2026-10-08T00:00:00Z --output new-update-index
 ```
 
-Publish only after separately authorizing and qualifying a release. The release
-must contain the exact installer, its `.sig`, and `latest.json`. Keep the previous
-signed installer and portable ZIP available for manual recovery. Publishing the
-index last avoids advertising an incomplete release.
+Публикуйте только после отдельного разрешения и проверки релиза. Релиз должен
+содержать именно проверенный установщик, его `.sig` и `latest.json`. Сохраняйте
+доступными предыдущий подписанный установщик и переносимый ZIP для ручного
+восстановления. Публикация индекса последним не позволяет объявить неполный релиз.
 
-## Admission and failure behavior
+## Допуск обновления и поведение при ошибках
 
-- Metadata: 64 KiB maximum, 5-second connect timeout, 10-second request timeout.
-- Installer: 256 MiB maximum, 120-second request timeout; size is checked both
-  before and during reading. Redirects are HTTPS-only, allowlisted and bounded.
-- Bytes are verified using minisign before disk admission or engine shutdown.
-  The installer PE version resource must also match the offered version, so a
-  signed older binary renamed as a new release is rejected.
-- One operation owns the updater. New checks invalidate stale offers; failed or
-  cancelled work can be retried and progress starts at zero. The offer is fetched
-  again and compared before downloading. Emergency-off and quit cancel pending
-  network I/O within a 200 ms polling interval; engine cleanup, once started,
-  completes its acknowledgement/exit path before cancellation returns. An atomic
-  handoff marks the point after which installer launch is no longer cancellable.
-- The staged installer is held without write/delete sharing. Testcard shutdown
-  and acknowledged engine cleanup must finish before launch. Shutdown can cancel
-  the operation before launch. No game process is killed.
-- The installer refuses to force-close a running LumaTape, including a portable
-  copy. Update mode waits up to ten seconds for the old process to exit; manual
-  installation asks the user to quit it first. NSIS starts through checked process creation with Tauri's `/P /R /UPDATE`
-  arguments. Launch failure keeps the tray open with a restart instruction; only
-  successful launch authorizes the host to exit. The installer performs its normal
-  update and relaunch. A successful process launch is **not** proof of installation.
-- Staging keeps at most one owned `pending-installer.exe`. Failed attempts remove
-  it; a later attempt reclaims the previous file only after Windows releases it.
-  No arbitrary files or directories are swept.
+- Метаданные: не более 64 KiB, тайм-аут соединения 5 секунд, запроса — 10 секунд.
+- Установщик: не более 256 MiB, тайм-аут запроса 120 секунд; размер проверяется
+  перед чтением и в процессе. Перенаправления разрешены только по HTTPS, по
+  списку допустимых адресов и в ограниченном количестве.
+- Байты проверяются minisign до записи на диск или остановки движка. Ресурс
+  версии установщика PE должен совпадать с предложенной версией: подписанный
+  старый бинарный файл, переименованный под новый релиз, отклоняется.
+- В каждый момент модулем обновлений владеет одна операция. Новые проверки
+  отменяют актуальность старых предложений; после ошибки или отмены можно
+  повторить попытку, прогресс начинается с нуля. Перед загрузкой предложение
+  запрашивается повторно и сравнивается. Аварийное отключение и выход отменяют
+  ожидающий сетевой ввод-вывод с интервалом опроса 200 ms. Если очистка движка уже
+  началась, до завершения отмены она проходит подтверждение и выход. Атомарная
+  передача управления отмечает момент, после которого отменить запуск
+  установщика нельзя.
+- Подготовленный установщик удерживается без совместного доступа на запись или
+  удаление. Завершение тестовой сцены и подтверждённая очистка движка должны
+  закончиться до запуска. Выход может отменить операцию до запуска установщика.
+  Процессы игр не завершаются.
+- Установщик отказывается принудительно закрывать работающий LumaTape, включая
+  переносимую копию. В режиме обновления он ждёт выхода старого процесса до
+  десяти секунд; при ручной установке просит пользователя сначала выйти.
+  NSIS запускается через проверенное создание процесса с аргументами Tauri
+  `/P /R /UPDATE`. При ошибке запуска трей остаётся открытым с указанием
+  перезапустить приложение; хосту разрешено выйти только после успешного запуска.
+  Установщик выполняет обычное обновление и повторный запуск. Успешный запуск
+  процесса сам по себе не подтверждает установку.
+- Во временном хранилище остаётся не более одного принадлежащего приложению
+  `pending-installer.exe`. Неудачные попытки удаляют его; следующая попытка
+  удаляет прежний файл только после освобождения Windows. Посторонние файлы и
+  каталоги не очищаются.
 
-The design reuses the boundaries learned in Slipstream (bounded discovery,
-signature admission, immutable version identity, cleanup before replacement),
-with an independent Windows implementation. Slipstream's macOS bundle watchdog,
-daemon/PF cleanup, keys and endpoints are not copied. No automatic rollback or
-post-install heartbeat is claimed for NSIS.
+В основе конструкции — проверенные в Slipstream границы: ограниченный поиск,
+проверка подписи перед допуском, неизменяемая идентичность версии и очистка перед
+заменой. Реализация Windows независима. Watchdog macOS-пакета Slipstream,
+очистка daemon/PF, ключи и адреса не перенесены. Автоматический откат и heartbeat
+после установки для NSIS не заявлены.
 
-Exact implementation references inspected:
+При разработке проверены точные версии реализации:
 [Tauri updater 2.9.0](https://docs.rs/tauri-plugin-updater/2.9.0/tauri_plugin_updater/),
-[Tauri CLI 2.11.3 NSIS template](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.3/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi).
+[шаблон NSIS Tauri CLI 2.11.3](https://github.com/tauri-apps/tauri/blob/tauri-cli-v2.11.3/crates/tauri-bundler/src/bundle/windows/nsis/installer.nsi).
 
-## Qualification before enabling a public channel
+## Проверки перед включением публичного канала
 
-Unit tests cover a real disposable signed fixture, byte tampering/truncation,
-version/URL/target binding, byte limits, redirects, overlapping operations,
-cancellation, retry and portable rejection. `scripts/test_prepare_update.py`
-checks the offline release index, signature and structural PE version admission,
-including a signed old binary renamed as a newer version. The fixture key is public
-test data; its private key was discarded and must never be a release trust root.
+Unit-тесты охватывают настоящий одноразовый подписанный образец, подмену/усечение
+байтов, привязку версии/URL/платформы, ограничения размера, перенаправления,
+перекрывающиеся операции, отмену, повторную попытку и отказ переносимой установке.
+`scripts/test_prepare_update.py` проверяет локальный индекс релиза, подпись и
+структурную проверку версии PE, включая подписанный старый бинарный файл,
+переименованный под новую версию. Ключ образца — публичные тестовые данные; его
+закрытый ключ уничтожен, и его нельзя использовать как корень доверия релиза.
 
-Still required on a disposable installed Windows profile before public release:
-install version N → configure a test release N+1 → offer/decline → confirm → verify
-restoration → installer completes → exactly one new tray/engine starts with the
-same user profile. Exercise launch failure, disk-full, unavailable network,
-shutdown while downloading, and installer cancellation. Verify an actual generated
-NSIS version resource and registry identity, then test a renamed older signed
-installer rejection and a copied/portable installation rejection. A portable
-runtime smoke or unit test does not qualify installed NSIS replacement or rollback.
+Перед публичным выпуском требуется проверка на одноразовом профиле с установленным
+LumaTape в Windows: установить версию N → настроить тестовый релиз N+1 → проверить
+предложение/отказ → подтвердить → проверить восстановление → дождаться завершения
+установщика → проверить запуск ровно одного нового трея/движка с тем же профилем.
+Проверьте ошибку запуска, заполненный диск, недоступную сеть, выход во время
+загрузки и отмену установщика. Проверьте реальный ресурс версии созданного NSIS
+и идентичность установки в реестре, затем отказ переименованному старому
+подписанному установщику и скопированной/переносимой установке. Этот раздел задаёт
+протокол и не фиксирует результаты конкретного релиза. Smoke-проверка переносимой
+версии или unit-тест не подтверждают замену установленной NSIS-версии или откат.

@@ -1,11 +1,13 @@
 # Local renderer control, protocol v1
 
-[Русский](README.md) · **English**
+[Русский](README.md) · English
 
 The Tauri host starts the exact bundled engine with `--control-stdio
 --headless-settings --controller-pid <host PID>` and inherited stdin/stdout
 pipes. No network listener, shared endpoint or shell execution command exists.
 Without these flags the native settings/tray fallback remains.
+
+## Messages and commands
 
 Each UTF-8 line is one JSON object. Request:
 `{"v":1,"id":"unique string","type":"snapshot","payload":{}}`.
@@ -17,8 +19,8 @@ retry a mutable request after an uncertain result.
 
 Events use `{"v":1,"event":"ready|state_changed|show_settings|fatal|stopped","data":...}`.
 `ready.data` is a snapshot. `state_changed` asks the host to refresh state and
-can be dropped under pressure. Replies/terminal events are not silently
-dropped: inability to deliver them stops the engine and requests cleanup.
+can be dropped under pressure. If a reply or terminal event cannot be delivered,
+the engine stops and requests cleanup.
 
 | Command | Payload | Result |
 | --- | --- | --- |
@@ -30,6 +32,8 @@ dropped: inability to deliver them stops the engine and requests cleanup.
 | `ui_state` | `{hwnd,visible}` | `{accepted:true}` after verifying host PID |
 | `diagnostics` | `{}` | Sanitized diagnostic object |
 | `quit` | `{}` | `{clean_shutdown:true}` only after cleanup |
+
+## Sources and preview
 
 HWND/process creation time are strings, never JavaScript numbers. Treat source
 IDs as opaque and return the complete selected window object with config. The
@@ -43,6 +47,8 @@ It enables a copy of the draft and sets only that copy's intensity to zero for
 the before image. PNG compression runs on a worker. Limits: 640×480, two
 requests per second, one outstanding request. Preview never changes live
 preferences or captures another application.
+
+## Queue and stale-request protection
 
 Limits: 128 KiB input line, 2 MiB output line, 16 ordinary queued commands and
 responses. Quit/emergency have dedicated priority slots. Emergency cancels
@@ -69,7 +75,9 @@ older clients, which retain only the emergency-sequence guard. This compares
 config values, not JSON formatting, and does not replace live source identity
 validation or detect a change that was subsequently reverted to equal values.
 
-The host drains stdout throughout the child lifetime. For quit/update, wait
+## Shutdown and recovery
+
+The host reads stdout throughout the child process's lifetime. For quit/update, wait
 for the clean quit response **and actual exit 0**; EOF alone proves neither
 cleanup nor restoration. Abort update on failure. Do not use process-tree kill
 or inherited kill-on-close jobs: the display watchdog must remain alive.

@@ -1,133 +1,147 @@
-# LumaTape architecture
+# Архитектура LumaTape
 
-LumaTape processes the image of a Windows SDR game running in a window or
-borderless mode. The game remains the source of native keyboard and mouse input.
-The target is Windows x64, Windows 10 build 19041 or later and OpenGL 3.3.
-Development on macOS does not imply a macOS product.
+[Русский](ARCHITECTURE.md) | [English](ARCHITECTURE.en.md)
 
-## Native tray and engine
+LumaTape обрабатывает изображение Windows-игры в SDR, запущенной в оконном режиме
+или без рамки. Игра продолжает получать обычный ввод с клавиатуры и мыши.
+Приложение рассчитано на Windows x64, Windows 10 сборки 19041 или новее и
+OpenGL 3.3. Разработка на macOS не означает, что существует версия для macOS.
 
-The public interface is a native **Tauri 2 tray menu**. No application panel,
-WebView or localhost server is started. Rust owns the menu, file dialogs,
-clipboard access and update coordination. Go/Win32 owns capture, rendering,
-configuration, hotkeys and recovery. Retained React/Vite sources are development
-history, not the shipped interface.
+## Нативный трей и движок
 
-The host launches only the bundled engine at its fixed resource path and uses
-private stdin/stdout JSONL pipes. The engine's hidden `LumaTape.Control` window
-handles native messages without creating another tray icon. Requests carry
-configuration revision and emergency sequence checks; stale applies cannot
-re-enable an effect after emergency off. Requested settings, applied state and
-backend capabilities remain separate. A timeout requires reading actual state,
-not assuming a rollback.
+Пользовательский интерфейс — нативное меню трея **Tauri 2**. Приложение не запускает
+панель, WebView или localhost-сервер. Rust управляет меню, файловыми диалогами,
+буфером обмена и обновлениями. Go/Win32 отвечает за захват, рендер, конфигурацию,
+горячие клавиши и восстановление. Сохранённые исходники React/Vite отражают историю
+разработки и не входят в поставляемый интерфейс.
 
-A second application launch uses the existing instance. Quit waits for acknowledged
-engine cleanup and process exit. Losing the host pipe also initiates engine
-cleanup. Errors remain accessible from the tray. Russian Windows UI language
-selects RU; other UI languages select EN. That choice is passed to child engine
-and testcard processes without changing stored user values or source titles.
+Хост запускает только комплектный движок по фиксированному пути в ресурсах и
+обменивается с ним JSONL через приватные каналы stdin/stdout. Скрытое окно движка
+`LumaTape.Control` обрабатывает нативные сообщения, не создавая второй значок трея.
+Запросы проверяются по ревизии конфигурации и номеру аварийной команды: устаревший
+запрос применения не может снова включить эффект после аварийного отключения.
+Запрошенные настройки, применённое состояние и возможности бэкенда учитываются
+отдельно. После тайм-аута нужно прочитать фактическое состояние; считать откат
+выполненным нельзя.
 
-Dependencies are locked with Cargo/npm lockfiles. The minimal tray asset directory
-is embedded by Tauri; no browser resources are downloaded at runtime. The package
-includes license texts selected by verified manifests, public documentation and
-example shaders. Local checkpoints, screenshots, logs and archived design
-experiments are excluded.
+Повторный запуск использует существующий экземпляр приложения. При выходе хост
+ждёт подтверждения очистки движка и завершения его процесса. Потеря канала связи
+с хостом тоже запускает очистку. Ошибки остаются доступны в трее. Русский язык
+интерфейса Windows выбирает RU, остальные языки — EN. Этот выбор передаётся
+дочерним процессам движка и тестовой сцены, не меняя сохранённые пользовательские
+значения или заголовки окон-источников.
 
-## Window and rendering ownership
+Версии зависимостей закреплены в lock-файлах Cargo/npm. Tauri встраивает
+минимальный каталог ресурсов трея; браузерные ресурсы во время работы не
+скачиваются. Пакет содержит тексты лицензий, отобранные по проверенным манифестам,
+публичную документацию и примеры шейдеров. Локальные checkpoints, снимки экрана,
+логи и архивные эксперименты с дизайном в пакет не входят.
 
-The initial Go goroutine is pinned to its OS thread. That thread owns GLFW,
-OpenGL, rendering and native window messages. Configuration commands are bounded
-and processed between frames; emergency commands take priority. No background
-loop repeatedly raises or focuses the game.
+## Владение окном и рендером
 
-An overlay remains hidden until shader, transparency, click-through and hotkey
-setup succeeds. It follows the selected source's client bounds and focus. Menu
-interaction can pause presentation; returning focus to the game is a user action.
-Moving or resizing the source invalidates unstable geometry. A new frame must
-match the current geometry before the surface returns.
+Начальная goroutine Go закреплена за своим потоком ОС. Этот поток владеет GLFW,
+OpenGL, рендером и обработкой нативных оконных сообщений. Команды конфигурации
+обрабатываются между кадрами с заданными ограничениями; аварийные команды имеют
+приоритет. Фоновых циклов, постоянно поднимающих окно игры или возвращающих ему
+фокус, нет.
 
-Lightweight draws transparent scanlines/noise over the source without reading its
-pixels. Full captures the chosen HWND with Windows Graphics Capture, then renders
-one opaque GLSL pass. Full monitor capture, HDR and protected-capture bypass are
-not supported.
+Оверлей остаётся скрытым, пока не завершена настройка шейдера, прозрачности,
+пропускания кликов и горячих клавиш. Он следует за клиентской областью и фокусом
+выбранного источника. Работа с меню может приостановить показ; пользователь сам
+возвращает фокус игре. Перемещение или изменение размера источника делает прежнюю
+геометрию непригодной. Поверхность появляется снова только после получения нового
+кадра, соответствующего текущей геометрии.
 
-## Capture paths
+Lightweight рисует прозрачные строки и шум поверх источника, не читая его пиксели.
+Full захватывает выбранный HWND через Windows Graphics Capture, затем выводит
+один непрозрачный проход GLSL. Захват всего монитора в Full, HDR и обход защиты от
+захвата не поддерживаются.
 
-GPU processing copies a fresh frame to an owned texture and uses
-`WGL_NV_DX_interop2` for OpenGL access. The driver must successfully register and
-lock a real compatible resource; extension names and DLL presence alone are not
-sufficient. This path includes a GPU copy and is not described as zero-copy.
+## Пути захвата
 
-Full CPU compatibility uses WGC → D3D11 staging → nonblocking Map → BGRA upload to
-OpenGL. There is at most one pending staging copy and a bounded pool of capture
-frames. Row pitch and GL unpack state are handled explicitly. Upload can still
-wait inside the driver. CPU submission is capped at 30 FPS, not guaranteed to
-sustain that rate.
+При обработке на GPU свежий кадр копируется в принадлежащую движку текстуру;
+OpenGL получает доступ через `WGL_NV_DX_interop2`. Драйвер должен успешно
+зарегистрировать и заблокировать реальный совместимый ресурс. Наличия DLL и
+названий расширений недостаточно. Этот путь включает копирование на GPU и не
+считается zero-copy.
 
-The desktop's Automatic setting tries GPU and allows CPU fallback only for
-classified interop failures. An explicit GPU selection does not silently fall
-back. Source, device and HDR failures retain their specific cause. Failed
-transitions preserve the previous working state where possible; without one, the
-tray remains available with the presentation surface hidden.
+Совместимый режим Full CPU использует WGC → D3D11 staging → неблокирующий Map →
+загрузку BGRA в OpenGL. Одновременно ожидает завершения не более одной staging-копии;
+пул кадров захвата ограничен. Шаг строки и состояние GL unpack обрабатываются
+явно. Загрузка всё ещё может ждать внутри драйвера. Отправка кадров на CPU
+ограничена 30 FPS; устойчивые 30 FPS не гарантируются.
 
-Freshness and geometry are checked before presentation. Closing a source, losing
-capture, stale frames and device errors must hide unsuitable output and release
-ownership. Full pixels do not accumulate across frames. GPU shader time,
-submission, transfer and captured-frame age are separate measurements.
+Настройка автоматической обработки в приложении сначала пробует GPU и разрешает
+переход на CPU только при распознанных ошибках interop. Явный выбор GPU не вызывает
+скрытого перехода на CPU. Ошибки источника, устройства и HDR сохраняют конкретную
+причину. При неудачном переходе прежнее рабочее состояние по возможности
+сохраняется. Если его нет, поверхность вывода скрыта, а трей остаётся доступен.
 
-## Effects, shape and clicks
+Перед показом проверяются свежесть кадра и геометрия. Закрытие источника, потеря
+захвата, устаревшие кадры и ошибки устройства должны скрывать непригодное
+изображение и освобождать захваченные ресурсы. Пиксели Full не накапливаются между
+кадрами. Время GPU-шейдера, отправка, передача и возраст захваченного кадра
+измеряются отдельно.
 
-Five presets are included: Subtle CRT, CRT Classic, Soft TV, VHS Light and VHS
-Tape. Custom GLSL effects use the versioned [shader contract](SHADER_SPEC.md).
-Import compiles before activation and stores an immutable local asset only after
-validation. Selecting a preset does not change the source, format or enabled
-state. Selecting a full effect from Lightweight chooses the compatible Full Auto
-path. The tray uses full shader strength and has no manual parameter editor.
+## Эффекты, форма и клики
 
-Screen shape is independent: Flat, Rounded CRT or Curved CRT. Rounded edges do
-not displace pixels. The built-in curved shape can project the system cursor
-appearance onto the image while leaving Windows coordinates, native mouse
-messages, Raw Input and mouse capture unchanged. A separate worker restores the
-ordinary cursor if its owner stops or the lease expires.
+В комплект входят пять пресетов: Subtle CRT, CRT Classic, Soft TV, VHS Light и VHS
+Tape. Пользовательские GLSL-эффекты используют версионированный
+[контракт шейдеров](SHADER_SPEC.md). Импорт компилирует шейдер до активации и
+сохраняет неизменяемый локальный файл только после проверки. Выбор пресета не
+меняет источник, формат и состояние включения. Выбор полного эффекта из
+Lightweight переключает на совместимый путь Full Auto. Трей использует полную
+интенсивность шейдера и не содержит ручного редактора параметров.
 
-**Accurate clicks** permits the known built-in curvature mapping. **Allow
-arbitrary distortion** also permits Crop, Stretch, custom aspect ratio and custom
-`warp` shaders. Both modes support keyboard and mouse; arbitrary transformations
-may misalign visible click targets. There is no general inverse mapping for an
-arbitrary shader. The [pointer module](../internal/pointer/README.md) describes
-cursor limitations and recovery.
+Форма экрана задаётся отдельно: плоская, скруглённый CRT или выпуклый CRT.
+Скругление краёв не смещает пиксели. Встроенная выпуклая форма может проецировать
+рисунок системного курсора на изображение, сохраняя координаты Windows, нативные
+сообщения мыши, Raw Input и захват мыши. Отдельный рабочий процесс восстанавливает
+обычный курсор при остановке владельца или истечении срока действия кадра.
 
-## Format and recovery
+Режим **Точные клики** разрешает известное преобразование встроенной кривизны.
+**Разрешить произвольные искажения** также допускает Crop, Stretch, произвольное
+соотношение сторон и пользовательские шейдеры `warp`. В обоих режимах работают
+клавиатура и мышь; произвольные преобразования могут смещать видимые цели
+относительно места клика. Универсального обратного преобразования для
+произвольного шейдера нет. Ограничения курсора и восстановление описаны в
+[модуле указателя](../internal/pointer/README.md).
 
-The tray offers the original format or a temporary Windows resolution. Masks and
-automatic game-window resizing are retired controls. Their legacy configuration
-and recovery records remain readable; they are not silently discarded. For
-ordinary 4:3 play, prefer the game's own resolution setting. A display mode alone
-does not guarantee the game's FOV, internal render size or monitor scaling.
+## Формат и восстановление
 
-Windows modes must come from enumeration and pass candidate validation. A change
-requires confirmation within 15 seconds and is guarded by an independent
-watchdog. Restoration checks ownership; subsequent user display changes are not
-overwritten. Legacy window recovery uses process identity and a per-window nonce,
-records state before mutation and checks actual geometry after application. An
-unresolved rollback remains in the recovery journal.
+В трее доступны исходный формат и временное разрешение Windows. Маски и
+автоматическое изменение размера игрового окна убраны из управления. Их старые
+настройки и записи восстановления по-прежнему читаются и не отбрасываются
+скрыто. Для обычной игры в 4:3 предпочтительна настройка разрешения в самой
+игре. Режим дисплея сам по себе не гарантирует FOV игры, размер внутреннего рендера
+или масштабирование монитора.
 
-## Updates and diagnostics
+Режимы Windows выбираются из системного перечня и проходят предварительную
+проверку. Изменение нужно подтвердить в течение 15 секунд; за ним следит
+независимый watchdog. При восстановлении проверяется, кому принадлежит изменение:
+последующие изменения дисплея пользователем не перезаписываются. Восстановление
+старых оконных настроек использует идентичность процесса и уникальный nonce окна,
+записывает состояние до изменения и проверяет фактическую геометрию после
+применения. Незавершённый откат остаётся в журнале восстановления.
 
-Updates use a dedicated LumaTape trust root, bounded HTTPS metadata/downloads,
-immutable version identity and signature verification before cleanup and
-replacement. Only a supported current-user NSIS installation can update in
-place; a portable ZIP can check but must be replaced manually. The detailed
-transaction and release protocol is in [UPDATES.md](UPDATES.md).
+## Обновления и диагностика
 
-Structured logs use a bounded queue and continuous rotation: current file plus
-three backups, each up to 4 MiB. Dropped events and write errors are counted.
-Clipboard diagnostics omit full paths, foreign window titles and screenshots by
-default and are never uploaded automatically. Shader time is not labeled total
-input-to-photon latency.
+Обновления используют отдельный корень доверия LumaTape, ограничения на HTTPS-
+метаданные и загрузки, неизменяемую идентичность версии и проверку подписи до
+очистки и замены. Обновление на месте поддерживается только для NSIS-установки
+текущего пользователя; переносимый ZIP может проверить обновления, но требует
+ручной замены. Транзакция и протокол выпуска описаны в [UPDATES.md](UPDATES.md).
 
-Portable rules/geometry tests, Mac shader readback, Windows CPU compatibility,
-hardware GPU interop, physical input and installer updates are distinct evidence
-layers. Use the [Windows protocol](WINDOWS_VALIDATION.md) and
-[Parallels protocol](PARALLELS_SMOKE.md); release checksums identify the tested
-artifact. Passing unit tests does not qualify all games, drivers or displays.
+Структурированные логи используют ограниченную очередь и постоянную ротацию:
+текущий файл и три резервные копии, каждая до 4 MiB. Пропущенные события и ошибки
+записи подсчитываются. Диагностика для буфера обмена по умолчанию не содержит
+полных путей, заголовков чужих окон и снимков экрана; она никогда не отправляется
+автоматически. Время шейдера не обозначается как полная задержка от ввода до
+изображения.
+
+Переносимые тесты правил и геометрии, проверка шейдеров с чтением результата на
+Mac, совместимость Windows CPU, аппаратный GPU interop, физический ввод и
+обновления через установщик дают разные виды свидетельств. Используйте
+[протокол Windows](WINDOWS_VALIDATION.md) и [протокол Parallels](PARALLELS_SMOKE.md);
+контрольные суммы релиза определяют проверенный артефакт. Успешные unit-тесты не
+подтверждают совместимость со всеми играми, драйверами и дисплеями.

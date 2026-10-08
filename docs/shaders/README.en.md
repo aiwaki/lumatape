@@ -1,15 +1,15 @@
 # Your own LumaTape effects
 
-[Home](../../README.en.md) · [Русский](README.md)
+[Documentation](../README.en.md) · [Русский](README.md)
 
-Already have a file? Choose **Add effect from file…** and open `.lumatape.glsl`.
-Once checked and compiled, it appears under **Effect**. If you have not selected
+Choose "Add effect from file…" and open a `.lumatape.glsl` file.
+Once checked and compiled, the effect appears under "Effect". If you have not selected
 a game yet, the file is still saved to your library for later. A failed import
 leaves the working effect intact.
 
-Need a file? Use the prompt below with an AI assistant of your choice, replacing
-the effect description. Save its answer as `.lumatape.glsl` and import it through
-the menu. LumaTape itself makes no AI requests.
+To create an effect with an AI assistant, use the prompt below and replace
+the effect description with your own. Save the answer as `.lumatape.glsl` and
+import it through the menu. LumaTape itself makes no AI requests.
 
 <details>
 <summary>Example AI prompt</summary>
@@ -39,7 +39,7 @@ For this color effect, keep coordinates:"preserve" and do not move the image.
 
 </details>
 
-[Example shaders](../../examples/shaders) · [LumaTape Shader v1 specification, in Russian](../SHADER_SPEC.md)
+[Example shaders](../../examples/shaders) · [LumaTape Shader v1 specification](../SHADER_SPEC.en.md)
 
 Shadertoy/ReShade files need adaptation. Arbitrary geometric distortion
 (`coordinates: "warp"`) must be explicitly allowed in Settings; accurate clicks

@@ -1,22 +1,40 @@
 # LumaTape documentation
 
-[Русский](README.md) · **English**
+[About LumaTape](../README.en.md) · [Русский](README.md) · English
 
-Installation and first steps: [Русский](../README.md) · [English](../README.en.md).
-The main application is a Windows app with a native Tauri tray. The retained
-React prototypes and standalone Go/Win32 interface are not its current UI.
+## First launch
 
-| Task | Document |
-|---|---|
-| Import an effect or create one with AI | [Русский](shaders/README.md), [English](shaders/README.en.md) |
-| Write a shader using the v1 contract | [Technical specification, in Russian](SHADER_SPEC.md), [examples](../examples/shaders) |
-| Build the tray application | [Desktop host](../desktop/src-tauri/README.en.md) |
-| Prepare a signed update | [Updates](UPDATES.md) |
-| Understand capture and rendering | [Architecture](ARCHITECTURE.md), [capture DLL](../native/capture/README.en.md) |
-| Validate a game, geometry and recovery | [Windows protocol](WINDOWS_VALIDATION.md) |
-| Understand cursor projection | [Pointer](../internal/pointer/README.en.md) |
-| Understand display-mode changes | [Display](../internal/display/README.en.md) |
-| Check dependency licenses | [Third-party notices](../third_party/README.en.md) |
+1. Download `LumaTape_<version>_x64-setup.exe` from the
+   [latest release](https://github.com/aiwaki/lumatape/releases/latest) and run the
+   installer. For a portable copy, extract the entire ZIP and open `lumatape.exe`;
+   keep the `engine` folder and all its files beside it.
+2. Open a game in windowed or borderless mode.
+3. Click the LumaTape tray icon, next to the Windows clock, and select the window
+   under "Game". If Windows hides the icon, open the tray's overflow menu.
+4. Choose an effect under "Effect", select "Turn on", and return to the game.
+   Try VHS Tape first. You can change effects while playing; your choice takes effect immediately.
+
+"Turn off" removes the effect and restores window or display-mode changes
+made by LumaTape. "Quit" closes the application. All settings are in the tray;
+there is no separate settings window.
+
+LumaTape is free and open source.
+
+Requires Windows 10 version 2004 or later, x64, OpenGL 3.3, and SDR.
+WebView2 and development tools are not required. HDR and exclusive fullscreen
+are unsupported.
+
+This is a preview. It has been tested in Windows through Parallels;
+physical GPU support and real-game compatibility still need validation.
+
+## Test scene and custom effects
+
+To try effects without a game, open "Tools → Test scene" and select it under
+"Game". F11 or Alt+Enter makes the scene fullscreen; Escape returns it to a window.
+
+The "Effect" menu includes five presets. To add your own shader, choose
+"Add effect from file…" and open a `.lumatape.glsl` file. Once checked, the effect
+appears in the menu. The [guide](shaders/README.en.md) has examples and a ready-to-use AI prompt.
 
 ## Updates
 
@@ -25,41 +43,53 @@ confirmation. Update a portable ZIP copy by extracting the new package separatel
 
 ## Image settings
 
-**Processing.** New profiles use Auto: GPU first, then compatible CPU processing
-only for a classified GPU-interop incompatibility. The presence of a capture DLL
-does not prove support for `WGL_NV_DX_interop2`. Other capture errors do not cause
-a hidden backend switch. Saved manual profiles stay manual. CPU processing is
-capped at 30 FPS. Lightweight supports only overlay effects and cannot replace a
-full image-processing shader.
+### Processing
 
-**Screen shape.** Flat adds no frame. Rounded CRT adds antialiased opaque corners,
+New profiles use automatic processing: GPU first, then compatible CPU processing
+only for a recognized driver incompatibility with texture sharing between Direct3D
+and OpenGL (GPU interop).
+Having the capture DLL is not enough: the driver needs `WGL_NV_DX_interop2`.
+Other capture errors do not trigger a switch. Saved manual choices stay unchanged.
+CPU processing is capped at 30 FPS. Lightweight supports only overlay effects;
+full color processing requires Full mode.
+
+### Screen shape
+
+Flat adds no frame. Rounded CRT adds antialiased opaque corners,
 edge shading and glass while preserving pixel positions. Curved CRT warps the
 image and requires Full. The radius is relative to the shorter image dimension.
 Turning the effect off also removes its screen shape.
 
-**Image distortion.** Both options keep keyboard and mouse input working.
-“Accurate clicks” allows the built-in curvature: its known geometry is used to
+### Image distortion
+
+Keyboard and mouse input work in both modes.
+"Accurate clicks" allows the built-in curvature: its known geometry is used to
 project the system cursor's image. Windows coordinates, button events, the wheel,
 Raw Input and mouse capture remain unchanged. This is not general game-input
 remapping. Crop/Stretch, custom DAR and a custom `warp` shader require an explicit
-choice of “Allow arbitrary distortion”. System-cursor projection is disabled for
+choice of "Allow arbitrary distortion". System-cursor projection is disabled for
 a custom `warp`; an author's `preserve` declaration alone does not prove that
 clicks align.
 
-**Scaling and older games' aspect ratios.** Fit preserves the whole frame; Crop
+### Scaling and older games' aspect ratios
+
+Fit preserves the whole frame; Crop
 fills the area by trimming edges; Stretch stretches the image. Usually keep the
-source aspect ratio. DAR 4:3 is useful, for example, for a 320×200 framebuffer
-designed for an older display's non-square pixels. 1280×1024 is 5:4, not 4:3.
+source aspect ratio. DAR sets the display aspect ratio. A value of 4:3 is useful,
+for example, for a 320×200 frame designed for an older display's non-square pixels.
+1280×1024 is 5:4, not 4:3.
 Fitting 16:9 inside a 4:3 area still displays a 16:9 image.
 
-**4:3 format.** For a normal game, set the format in the game itself. Masking and
+### 4:3 format
+
+Set the format in the game itself. Masking and
 client-window resizing were removed from the menu: masking only covered part of
 the frame, and resizing caused recurring side-field flicker in Parallels. Older
-JSON/CLI profiles remain readable. Their active state is shown as “from profile”;
-“Original format” or “Turn off” restores LumaTape's own changes.
+JSON/CLI profiles remain readable. Their active state is shown as "from profile";
+"Original aspect ratio" or "Turn off" restores LumaTape's own changes.
 
-“Windows resolution…” uses only modes enumerated by Windows, tests the candidate
-and applies it temporarily without writing to the registry. “Keep display mode”
+"Windows resolution…" uses only modes enumerated by Windows, tests the candidate
+and applies it temporarily without writing to the registry. "Keep display mode"
 is available for 15 seconds after application. A separate watchdog restores the
 mode on timeout, exit or main-process crash. A later detected user change is not
 overwritten. Win32 has no atomic compare-and-set: a short race or a change and
@@ -69,9 +99,13 @@ processes terminating together or an OS/driver failure. A GPU/display may stretc
 
 ## Shortcuts, language and storage
 
-In a new profile, Ctrl+Shift+9 toggles the effect; Ctrl+Shift+0 performs emergency
-off and restores changes. Existing bindings are preserved. The alternative pair
-is Ctrl+Alt+F9 / Ctrl+Alt+F10. A registration conflict leaves the working pair in
+| New-profile shortcut | Action |
+|---|---|
+| Ctrl+Shift+9 | Turn the effect on / off |
+| Ctrl+Shift+0 | Emergency off and restore changes |
+
+Existing shortcuts are preserved and listed under "Settings → Hotkeys".
+The alternative pair is Ctrl+Alt+F9 / Ctrl+Alt+F10. A registration conflict leaves the working pair in
 place. The menu's shortcut test distinguishes registration from actual receipt;
 the commands continue to act while the test is open.
 
@@ -83,8 +117,8 @@ If changing focus in Parallels changes mouse speed or button state, check Smart
 Mouse: **Don't optimize for games** resolved this in the tested configuration.
 That is a VM setting, not a LumaTape setting.
 
-Language is selected at startup from the Windows UI language: RU → Russian;
-otherwise → English. Regional formats do not affect it; restart the application
+The Windows display language determines the language at startup: RU selects
+Russian, and other languages select English. Regional formats do not affect it; restart the application
 after changing the Windows language. Game, preset and custom-shader names are not
 translated. Technical OS/driver messages may remain in their original language.
 
@@ -99,14 +133,14 @@ reading an older profile does not overwrite its values.
 If something goes wrong, open "Tools → Last error…".
 [Report an issue](https://github.com/aiwaki/lumatape/issues).
 
-“Copy diagnostics” excludes screenshots, full paths, shader code and other
+"Copy diagnostics" excludes screenshots, full paths, shader code and other
 windows' titles; nothing is sent automatically. The local JSON log uses a bounded
 queue and continuous rotation: the current file and three backups, each up to
 4 MiB. Dropped events and write failures are counted.
 
-Measurements distinguish CPU submission, GPU shader time, CPU transfer and
-captured-frame age. These are not total input-to-display latency; GPU shader time
-must not be presented as the whole application's latency. `null` means a
+Measurements separate CPU command submission, GPU shader time, CPU frame transfer
+and captured-frame age. None of these measures total input-to-display latency.
+`null` means a
 measurement is unavailable. Saving a diagnostic PNG synchronizes the GPU and is
 not suitable for performance measurement.
 
@@ -125,13 +159,31 @@ fully hangs, the frozen image itself may remain until the engine resumes or
 terminates. The fix for a doubled cursor at Parallels window boundaries has not
 yet been confirmed by physical observation.
 
+## Technical documentation
+
+| Task | Document |
+|---|---|
+| Write a shader using the v1 contract | [Specification](SHADER_SPEC.en.md), [examples](../examples/shaders) |
+| Build the tray application | [Tauri host](../desktop/src-tauri/README.en.md) |
+| Prepare a signed update | [Updates](UPDATES.en.md) |
+| Understand capture and rendering | [Architecture](ARCHITECTURE.en.md), [capture library](../native/capture/README.en.md) |
+| Validate a game, geometry and recovery | [Windows protocol](WINDOWS_VALIDATION.en.md), [Parallels](PARALLELS_SMOKE.en.md) |
+| Understand cursor projection | [Cursor projection](../internal/pointer/README.en.md) |
+| Understand display-mode changes | [Display modes](../internal/display/README.en.md) |
+| Check licenses | [MIT](../LICENSE), [component licenses](../third_party/README.en.md) |
+
 ## Building and validation
+
+The current application uses a native Tauri tray. The repository retains React
+prototypes and a standalone Go/Win32 interface, but neither is part of the current UI.
 
 Build Windows x64 with locked dependencies. Requirements: Go ≥1.23, Rust,
 Node/npm for the Tauri CLI, Python ≥3.11, Git, CMake ≥3.24 and Visual Studio 2022
 Build Tools with **Desktop development with C++**, C++20 and Windows SDK ≥10.0.26100.
 The build SDK is newer than the minimum runtime OS; the APIs used are limited to
-build 19041.
+build 19041. The commands below use `0.3.1` as an example version. Substitute the
+version from `desktop/package.json`, `Cargo.toml` and `tauri.conf.json`;
+it must match across all three files.
 
 ```powershell
 .\scripts\build-desktop.ps1 -Version 0.3.1
@@ -140,7 +192,7 @@ build 19041.
 The script builds the native DLLs, Go engine/testcard/watchdog, resources and
 Tauri host, then creates a clean ZIP, SHA256, metadata and licenses. React/Vite
 is not built. Signed NSIS packages are built separately using the
-[update instructions](UPDATES.md).
+[update instructions](UPDATES.en.md).
 
 Cross-building on macOS/Linux needs the `x86_64-pc-windows-msvc` target,
 `cargo-xwin`, LLVM and an explicitly prepared native CMake install directory:
@@ -149,9 +201,8 @@ Cross-building on macOS/Linux needs the `x86_64-pc-windows-msvc` target,
 scripts/build-desktop.sh /absolute/native-install 0.3.1
 ```
 
-The version argument must match `desktop/package.json`, `Cargo.toml` and
-`tauri.conf.json`. Resource preparation and local startup are described in
-[Desktop host](../desktop/src-tauri/README.en.md).
+See the [Tauri host guide](../desktop/src-tauri/README.en.md) for resource preparation
+and local startup.
 
 ```sh
 sh scripts/check.sh                        # Go unit/race/vet + Windows cross-build
@@ -163,7 +214,7 @@ cd desktop && npm run test:host            # Rust host/menu/updater
 These are separate validation layers: portable logic, Mac CGL, Windows CPU
 compatibility and physical Windows GPU. Passing unit tests or a cross-build does
 not prove image quality, real-click alignment or a particular game's compatibility.
-For Windows checks, use the [protocol](WINDOWS_VALIDATION.md) and the bundled test
+For Windows checks, use the [protocol](WINDOWS_VALIDATION.en.md) and the bundled test
 scene. `lumatape-testcard.exe --fullscreen --pointer-test` starts the cursor-test
 scene without a border; `--color-field` helps assess noise and chroma.
 

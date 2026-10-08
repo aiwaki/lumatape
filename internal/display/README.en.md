@@ -1,19 +1,22 @@
 # Temporary monitor modes
 
-[Русский](README.md) · **English**
+[Русский](README.md) · English
 
-This package is opt-in. Keep the desktop at its native resolution by default.
+Use this package only when the user explicitly selects a display mode. Keep the desktop at its native resolution by default.
 `ListModes(device)` uses only `EnumDisplaySettingsW`; `Choose43` excludes 5:4,
 interlaced and lower-color modes, preserving the current reported refresh rate
 when one is available. Every requested mode is re-enumerated and tested with
 `CDS_TEST` by an independent watchdog before application.
 
+## Starting a session
+
 Build and ship `cmd/lumatape-watchdog` as `lumatape-watchdog.exe` next to the app. The main
 process calls `StartSession`, which waits for a ready handshake over inherited
 anonymous pipes. The child captures the complete current `DEVMODEW` including
-returned private driver bytes **before** changing anything. The child owns both
-apply and restore, avoiding a crash gap between an external arm operation and a
-main-process display change. Dynamic `ChangeDisplaySettingsExW` uses flags zero:
+returned private driver bytes **before** changing anything. The child applies
+and restores the mode. There is no gap between arming protection and changing
+the display in which a main-process crash would leave the display unprotected.
+Dynamic `ChangeDisplaySettingsExW` uses flags zero:
 no registry update, custom resolution, unsafe mode or HDR setting is requested.
 
 After a successful `StartSession`, immediately defer `Restore`. Show a user
@@ -34,6 +37,8 @@ attempts finish; bare process EOF is never treated as successful restoration.
 `Restore` accepts a terminal reply already delivered by automatic rollback and
 also handles the race between such a reply and a broken-pipe write.
 
+## Independent changes and recovery limits
+
 Restoration compares the current resolution, reported frequency, color depth,
 mode flags, rotation, position, scaling policy and panning size against the last
 applied state. Polling every 200 ms permanently relinquishes ownership as soon
@@ -51,6 +56,8 @@ Verify the panel is not stretching the mode; prefer native desktop resolution
 plus a game's own 4:3 framebuffer when possible. This does not change any game's
 internal rendering resolution or FOV by itself.
 
+## Validation
+
 Portable tests exercise timeout, confirmation, pipe EOF before/after
 confirmation, idempotent restoration, rejected modes, full-state retention and
 external mode/layout changes. Windows cross-compilation is not a runtime
@@ -59,7 +66,7 @@ hardware with negative coordinates, refresh-rate changes, confirmation expiry,
 `taskkill /PID <main pid> /F` (without `/T`, which also kills the watchdog),
 disconnect/reconnect, independent changes and restart.
 
-API references reviewed during implementation:
+## API references
 
 - https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsw
 - https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-changedisplaysettingsexw

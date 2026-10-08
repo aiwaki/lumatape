@@ -2,8 +2,8 @@
 
 [Русский](README.md) · **English**
 
-Unmodified official GitHub font, stored locally. No CDN or font network request
-is needed at runtime. Only its local filename was shortened to `mona-sans.woff2`;
+The official GitHub font is stored locally without modifications. No CDN or
+font network request is needed at runtime. Only its local filename was shortened to `mona-sans.woff2`;
 the internal font names and tables are unchanged. This is the official family,
 not a claim that the file is byte-identical to the font served by githubuniverse.com.
 
@@ -27,8 +27,8 @@ to `OFL.txt` (2022 Mona Sans Project Authors, Reserved Font Name "Mona").
 
 ## Actual font tables
 
-Inspected directly with FontTools 4.66.1 and Brotli 1.2.0; no font conversion,
-subsetting, renaming of internal names, or editing was performed.
+The tables were inspected directly with FontTools 4.66.1 and Brotli 1.2.0. The
+font was not converted, subsetted, renamed internally, or otherwise edited.
 
 - Family / typographic family: `Mona Sans VF`
 - Subfamily: `Regular`

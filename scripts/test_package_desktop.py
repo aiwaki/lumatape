@@ -31,7 +31,7 @@ class DesktopPackageTests(unittest.TestCase):
                      'cmd/lumatape-testcard/README.md', 'cmd/lumatape-testcard/README.en.md', 'internal/control/README.md', 'internal/control/README.en.md', 'internal/display/README.md', 'internal/display/README.en.md', 'internal/pointer/README.md', 'internal/pointer/README.en.md', 'native/capture/README.md', 'native/capture/README.en.md', 'scripts/windows-control-smoke/README.md', 'scripts/windows-control-smoke/README.en.md', 'scripts/windows-ui-smoke/README.md', 'scripts/windows-ui-smoke/README.en.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub',
                      'desktop/package-lock.json', 'third_party/frontend-provenance.json']:
             self.write(name, b'test notice\n')
-        for name in ['README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'PARALLELS_SMOKE.md', 'CURRENT_STATE.md', 'ARCHITECTURE.md', 'PRIOR_ART_AUDIT.md', 'SHADER_SPEC.md', 'UPDATES.md']:
+        for name in ['README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'WINDOWS_VALIDATION.en.md', 'PARALLELS_SMOKE.md', 'PARALLELS_SMOKE.en.md', 'CURRENT_STATE.md', 'ARCHITECTURE.md', 'ARCHITECTURE.en.md', 'PRIOR_ART_AUDIT.md', 'PRIOR_ART_AUDIT.en.md', 'SHADER_SPEC.md', 'SHADER_SPEC.en.md', 'UPDATES.md', 'UPDATES.en.md']:
             self.write('docs/' + name, b'Unqualified test fixture\n')
         for name in ['amber-crt.lumatape.glsl', 'cold-bleed.lumatape.glsl']:
             self.write('examples/shaders/' + name, b'Test shader fixture\n')
@@ -135,6 +135,12 @@ class DesktopPackageTests(unittest.TestCase):
         for path in ['README.en.md', 'START-HERE.en.txt', 'docs/README.md', 'docs/README.en.md', 'docs/shaders/README.md', 'docs/shaders/README.en.md', 'internal/pointer/README.en.md', 'native/capture/README.md', 'third_party/README.en.md', 'desktop/src-tauri/README.en.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub']:
             self.assertTrue((support/path).is_file(), path)
         self.assertTrue((support/'docs/UPDATES.md').is_file())
+        translated_docs = ['ARCHITECTURE', 'PARALLELS_SMOKE', 'PRIOR_ART_AUDIT',
+                           'SHADER_SPEC', 'UPDATES', 'WINDOWS_VALIDATION']
+        for name in translated_docs:
+            for language in ['', '.en']:
+                path = Path('docs') / f'{name}{language}.md'
+                self.assertEqual((support/path).read_bytes(), (self.root/path).read_bytes())
         self.assertTrue((support/'licenses/rust/manifest.json').is_file())
         self.assertFalse((support/'docs/CURRENT_STATE.md').exists())
         self.assertFalse((support/'docs/local-session.md').exists())
@@ -143,6 +149,10 @@ class DesktopPackageTests(unittest.TestCase):
         result = self.run_package()
         with zipfile.ZipFile(result['archive']) as archive:
             names = archive.namelist()
+            for name in translated_docs:
+                path = f'docs/{name}.en.md'
+                self.assertEqual(archive.read(f'{Path(result["archive"]).stem}/{path}'),
+                                 (self.root/path).read_bytes())
             self.assertFalse(any('CURRENT_STATE' in name or 'local-session' in name for name in names))
             self.assertFalse(any(private in archive.read(name) for name in names))
         # Fresh public checkouts have no checkpoint, and still package identically.
