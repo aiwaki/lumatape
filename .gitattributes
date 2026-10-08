@@ -1,0 +1,9 @@
+# Keep source and generated lock inputs stable across Windows/macOS checkouts.
+* text=auto eol=lf
+
+# These upstream files are verified byte-for-byte against recorded provenance.
+# Never normalize their line endings, including when core.autocrlf is enabled.
+desktop/scripts/license-overrides/** -text
+desktop/scripts/npm-license-overrides/** -text
+third_party/** -text
+desktop/ui/assets/fonts/** -text
