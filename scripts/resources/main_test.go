@@ -4,6 +4,9 @@ import (
 	"bytes"
 	"debug/pe"
 	"encoding/binary"
+	"image"
+	"image/color"
+	"image/draw"
 	"image/png"
 	"os"
 	"os/exec"
@@ -12,61 +15,154 @@ import (
 	"testing"
 )
 
-func TestIconScalesHaveTransparentMarginAndVisibleBody(t *testing.T) {
-	s, e := os.ReadFile("../../assets/lumatape.svg")
-	if e != nil {
-		t.Fatal(e)
-	}
-	shapes, e := parseSVG(s)
-	if e != nil {
-		t.Fatal(e)
-	}
-	b, e := makeICO(shapes)
-	if e != nil {
-		t.Fatal(e)
-	}
-	if binary.LittleEndian.Uint16(b[4:6]) != uint16(len(sizes)) {
-		t.Fatal("missing icon sizes")
-	}
-	for i, size := range sizes {
-		entry := b[6+i*16:]
-		length := binary.LittleEndian.Uint32(entry[8:])
-		offset := binary.LittleEndian.Uint32(entry[12:])
-		im, e := png.Decode(bytes.NewReader(b[offset : offset+length]))
-		if e != nil {
-			t.Fatal(e)
-		}
-		if im.Bounds().Dx() != size || im.Bounds().Dy() != size {
-			t.Fatal("wrong icon dimensions")
-		}
-		_, _, _, corner := im.At(0, 0).RGBA()
-		_, _, _, body := im.At(size/2, size/2).RGBA()
-		if corner != 0 || body == 0 {
-			t.Fatalf("size%d invalid alpha", size)
-		}
-	}
+var iconAssetPaths = []string{
+	"assets/lumatape.ico",
+	"desktop/src-tauri/icons/icon.ico",
+	"desktop/src-tauri/icons/icon.png",
 }
 
-func TestSVGClipPreservesStraightBandsAndTransparentCorners(t *testing.T) {
-	shapes, err := parseSVG([]byte(`<svg><defs><clipPath id="tile"><rect x="10" y="10" width="44" height="44" rx="8"/></clipPath></defs><rect x="0" y="0" width="32" height="64" fill="#FF0000" clip-path="url(#tile)"/><rect x="32" y="0" width="32" height="64" fill="#0000FF" clip-path="url(#tile)"/></svg>`))
+func copyExportedAssets(t *testing.T) (string, map[string][]byte) {
+	t.Helper()
+	root := t.TempDir()
+	assets := make(map[string][]byte)
+	for _, name := range iconAssetPaths {
+		data, err := os.ReadFile(filepath.Join("../..", name))
+		if err != nil {
+			t.Fatal(err)
+		}
+		path := filepath.Join(root, name)
+		if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(path, data, 0644); err != nil {
+			t.Fatal(err)
+		}
+		assets[name] = data
+	}
+	return root, assets
+}
+
+func TestExportedAssetsValidateWithoutRewritingOrRequiringSVG(t *testing.T) {
+	root, assets := copyExportedAssets(t)
+	// The deprecated flag must still work without a version, SVG or resource tools.
+	if err := run(root, "not-a-version", "missing-rc", "missing-cvtres", true); err != nil {
+		t.Fatal(err)
+	}
+	files := 0
+	err := filepath.WalkDir(root, func(path string, entry os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if entry.IsDir() {
+			return nil
+		}
+		files++
+		name, err := filepath.Rel(root, path)
+		if err != nil {
+			return err
+		}
+		data, err := os.ReadFile(path)
+		if err != nil {
+			return err
+		}
+		if !bytes.Equal(data, assets[filepath.ToSlash(name)]) {
+			t.Errorf("asset changed or unexpected output created: %s", name)
+		}
+		return nil
+	})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(shapes) != 2 {
-		t.Fatal("clip geometry must not become a painted shape")
+	if files != len(assets) {
+		t.Fatalf("validation changed the asset set: got %d files, want %d", files, len(assets))
 	}
-	im := raster(shapes, 64)
-	for _, point := range [][2]int{{0, 32}, {63, 32}, {10, 10}, {53, 53}} {
-		if im.NRGBAAt(point[0], point[1]).A != 0 {
-			t.Fatalf("clip must leave %v transparent", point)
+}
+
+func TestIconValidationRejectsDamagedExports(t *testing.T) {
+	data, err := os.ReadFile("../../assets/lumatape.ico")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for name, mutate := range map[string]func([]byte) []byte{
+		"short-header":           func(b []byte) []byte { return b[:5] },
+		"not-an-icon":            func(b []byte) []byte { b[2] = 2; return b },
+		"empty-directory":        func(b []byte) []byte { binary.LittleEndian.PutUint16(b[4:6], 0); return b },
+		"truncated-directory":    func(b []byte) []byte { return b[:6] },
+		"invalid-dimensions":     func(b []byte) []byte { b[7] = 15; return b },
+		"wrong-pixel-dimensions": func(b []byte) []byte { b[6], b[7] = 17, 17; return b },
+		"invalid-color-metadata": func(b []byte) []byte { b[12] = 1; return b },
+		"empty-payload":          func(b []byte) []byte { binary.LittleEndian.PutUint32(b[14:18], 0); return b },
+		"payload-over-directory": func(b []byte) []byte { binary.LittleEndian.PutUint32(b[18:22], 6); return b },
+		"payload-outside-file":   func(b []byte) []byte { binary.LittleEndian.PutUint32(b[18:22], 0xfffffff0); return b },
+		"corrupt-png":            func(b []byte) []byte { b[binary.LittleEndian.Uint32(b[18:22])] = 0; return b },
+		"overlapping-layers":     func(b []byte) []byte { copy(b[22:38], b[6:22]); return b },
+		"missing-scales":         func(b []byte) []byte { binary.LittleEndian.PutUint16(b[4:6], 1); return b },
+	} {
+		t.Run(name, func(t *testing.T) {
+			if _, err := validateICO(mutate(bytes.Clone(data))); err == nil {
+				t.Fatal("accepted damaged ICO export")
+			}
+		})
+	}
+}
+
+func TestAssetValidationRejectsMissingOrMismatchedFiles(t *testing.T) {
+	for _, name := range iconAssetPaths {
+		t.Run("missing-"+name, func(t *testing.T) {
+			root, _ := copyExportedAssets(t)
+			if err := os.Remove(filepath.Join(root, name)); err != nil {
+				t.Fatal(err)
+			}
+			if _, err := validateAssets(root); err == nil {
+				t.Fatal("accepted missing export")
+			}
+		})
+	}
+	t.Run("different-ico", func(t *testing.T) {
+		root, assets := copyExportedAssets(t)
+		name := "desktop/src-tauri/icons/icon.ico"
+		data := bytes.Clone(assets[name])
+		data[len(data)-1] ^= 1
+		if err := os.WriteFile(filepath.Join(root, name), data, 0644); err != nil {
+			t.Fatal(err)
 		}
-	}
-	for _, y := range []int{12, 32, 51} {
-		left, right := im.NRGBAAt(31, y), im.NRGBAAt(32, y)
-		if left.R != 255 || left.B != 0 || left.A != 255 || right.R != 0 || right.B != 255 || right.A != 255 {
-			t.Fatalf("clip changed the straight colour boundary at y=%d", y)
+		if _, err := validateAssets(root); err == nil || !strings.Contains(err.Error(), "out of sync") {
+			t.Fatal("did not report mismatched ICO exports", err)
 		}
-	}
+	})
+	t.Run("different-png-pixels", func(t *testing.T) {
+		root, assets := copyExportedAssets(t)
+		name := "desktop/src-tauri/icons/icon.png"
+		im, err := png.Decode(bytes.NewReader(assets[name]))
+		if err != nil {
+			t.Fatal(err)
+		}
+		// Change one pixel in a temporary fixture while keeping a valid PNG.
+		changed := image.NewNRGBA(im.Bounds())
+		draw.Draw(changed, changed.Bounds(), im, im.Bounds().Min, draw.Src)
+		x, y := changed.Bounds().Dx()/2, changed.Bounds().Dy()/2
+		c := changed.NRGBAAt(x, y)
+		changed.SetNRGBA(x, y, color.NRGBA{R: c.R ^ 0xff, G: c.G, B: c.B, A: 255})
+		var encoded bytes.Buffer
+		if err := png.Encode(&encoded, changed); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(root, name), encoded.Bytes(), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := validateAssets(root); err == nil || !strings.Contains(err.Error(), "out of sync") {
+			t.Fatal("did not report mismatched PNG pixels", err)
+		}
+	})
+	t.Run("corrupt-desktop-png", func(t *testing.T) {
+		root, _ := copyExportedAssets(t)
+		if err := os.WriteFile(filepath.Join(root, "desktop/src-tauri/icons/icon.png"), []byte("invalid PNG"), 0644); err != nil {
+			t.Fatal(err)
+		}
+		if _, err := validateAssets(root); err == nil {
+			t.Fatal("accepted corrupt PNG export")
+		}
+	})
 }
 
 func TestVersionCannotInjectResourceSource(t *testing.T) {

@@ -1,21 +1,17 @@
-// resources renders the repository's small SVG subset into a multiscale ICO,
-// then uses SDK/LLVM resource tools to embed icon101 and version metadata into
-// all three Windows EXEs. No image/network/UI dependency is needed.
+// resources validates the checked-in icon exports, then uses SDK/LLVM
+// resource tools to embed icon101 and version metadata into all three Windows EXEs.
+// Artwork is exported separately; this command never rewrites icon assets.
 package main
 
 import (
 	"bytes"
 	"debug/pe"
 	"encoding/binary"
-	"encoding/xml"
 	"errors"
 	"flag"
 	"fmt"
 	"image"
-	"image/color"
 	"image/png"
-	"io"
-	"math"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -25,22 +21,12 @@ import (
 	"strings"
 )
 
-var sizes = []int{16, 20, 24, 32, 40, 48, 64, 128, 256}
-
-type shape struct {
-	kind          string
-	x, y, w, h, r float64
-	c             color.NRGBA
-	clipID        string
-	clip          *shape
-}
-
 func main() {
 	root := flag.String("root", ".", "repository root")
 	version := flag.String("version", "0.3.0", "semantic product version")
 	rc := flag.String("rc", "", "path to rc.exe or llvm-rc")
 	cvtres := flag.String("cvtres", "", "path to cvtres.exe or llvm-cvtres")
-	assetsOnly := flag.Bool("assets-only", false, "write vector-derived ICO/PNG assets without compiling EXE resources")
+	assetsOnly := flag.Bool("assets-only", false, "deprecated: validate checked-in icon assets without compiling EXE resources")
 	flag.Parse()
 	if err := run(*root, *version, *rc, *cvtres, *assetsOnly); err != nil {
 		fmt.Fprintln(os.Stderr, "resources:", err)
@@ -53,42 +39,9 @@ func run(root, version, rc, cvtres string, assetsOnly bool) error {
 	if err != nil {
 		return err
 	}
-	svg, err := os.ReadFile(filepath.Join(root, "assets", "lumatape.svg"))
+	iconPath, err := validateAssets(root)
 	if err != nil {
 		return err
-	}
-	shapes, err := parseSVG(svg)
-	if err != nil {
-		return err
-	}
-	ico, err := makeICO(shapes)
-	if err != nil {
-		return err
-	}
-	iconPath := filepath.Join(root, "assets", "lumatape.ico")
-	if err = os.WriteFile(iconPath, ico, 0644); err != nil {
-		return err
-	}
-	// The Go EXEs, Tauri shell and previews share this SVG renderer. Do not
-	// maintain an independently edited raster icon for the desktop shell.
-	desktopIcons := filepath.Join(root, "desktop", "src-tauri", "icons")
-	if err = os.MkdirAll(desktopIcons, 0755); err != nil {
-		return err
-	}
-	if err = os.WriteFile(filepath.Join(desktopIcons, "icon.ico"), ico, 0644); err != nil {
-		return err
-	}
-	if err = writePNG(filepath.Join(desktopIcons, "icon.png"), raster(shapes, 256)); err != nil {
-		return err
-	}
-	previewDir := filepath.Join(root, "build", "resources")
-	if err = os.MkdirAll(previewDir, 0755); err != nil {
-		return err
-	}
-	for _, size := range []int{16, 24, 64} {
-		if err = writePNG(filepath.Join(previewDir, fmt.Sprintf("icon-%d.png", size)), raster(shapes, size)); err != nil {
-			return err
-		}
 	}
 	if assetsOnly {
 		return nil
@@ -191,12 +144,135 @@ func normalizeResourceCOFF(data []byte) ([]byte, error) {
 	return out, nil
 }
 
-func writePNG(path string, im image.Image) error {
-	var b bytes.Buffer
-	if err := png.Encode(&b, im); err != nil {
-		return err
+// validateAssets keeps the Go executables and Tauri shell on the same export.
+func validateAssets(root string) (string, error) {
+	iconPath := filepath.Join(root, "assets", "lumatape.ico")
+	ico, err := os.ReadFile(iconPath)
+	if err != nil {
+		return "", err
 	}
-	return os.WriteFile(path, b.Bytes(), 0644)
+	layers, err := validateICO(ico)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", iconPath, err)
+	}
+	desktopIcons := filepath.Join(root, "desktop", "src-tauri", "icons")
+	desktopICO := filepath.Join(desktopIcons, "icon.ico")
+	other, err := os.ReadFile(desktopICO)
+	if err != nil {
+		return "", err
+	}
+	if !bytes.Equal(ico, other) {
+		return "", fmt.Errorf("icon exports are out of sync: %s and %s must be identical", iconPath, desktopICO)
+	}
+	pngPath := filepath.Join(desktopIcons, "icon.png")
+	data, err := os.ReadFile(pngPath)
+	if err != nil {
+		return "", err
+	}
+	preview, err := validatePNG(data, 256, 256)
+	if err != nil {
+		return "", fmt.Errorf("%s: %w", pngPath, err)
+	}
+	if !samePixels(preview, layers[256]) {
+		return "", fmt.Errorf("icon exports are out of sync: %s must match the 256x256 ICO layer", pngPath)
+	}
+	return iconPath, nil
+}
+
+func validateICO(data []byte) (map[int]image.Image, error) {
+	if len(data) < 6 || binary.LittleEndian.Uint16(data[:2]) != 0 || binary.LittleEndian.Uint16(data[2:4]) != 1 {
+		return nil, errors.New("invalid ICO header")
+	}
+	count := int(binary.LittleEndian.Uint16(data[4:6]))
+	tableEnd := 6 + 16*count
+	if count == 0 || count > 256 || tableEnd > len(data) {
+		return nil, errors.New("invalid or truncated ICO directory")
+	}
+	type interval struct{ start, end uint64 }
+	ranges := make([]interval, 0, count)
+	layers := make(map[int]image.Image)
+	for i := 0; i < count; i++ {
+		entry := data[6+16*i : 6+16*(i+1)]
+		w, h := int(entry[0]), int(entry[1])
+		if w == 0 {
+			w = 256
+		}
+		if h == 0 {
+			h = 256
+		}
+		planes, bits := binary.LittleEndian.Uint16(entry[4:6]), binary.LittleEndian.Uint16(entry[6:8])
+		if w != h || w < 16 || entry[2] != 0 || entry[3] != 0 || planes > 1 || (bits != 0 && bits != 32) {
+			return nil, fmt.Errorf("ICO layer %d has invalid dimensions or color metadata", i)
+		}
+		length := uint64(binary.LittleEndian.Uint32(entry[8:12]))
+		start := uint64(binary.LittleEndian.Uint32(entry[12:16]))
+		end := start + length
+		if length == 0 || start < uint64(tableEnd) || end > uint64(len(data)) {
+			return nil, fmt.Errorf("ICO layer %d is outside the image payload", i)
+		}
+		for _, prior := range ranges {
+			if start < prior.end && prior.start < end {
+				return nil, fmt.Errorf("ICO layer %d overlaps another layer", i)
+			}
+		}
+		ranges = append(ranges, interval{start, end})
+		im, err := validatePNG(data[start:end], 16, 256)
+		if err != nil {
+			return nil, fmt.Errorf("ICO layer %d must contain a valid PNG export: %w", i, err)
+		}
+		if im.Bounds().Dx() != w || im.Bounds().Dy() != h {
+			return nil, fmt.Errorf("ICO layer %d dimensions differ from its directory entry", i)
+		}
+		layers[w] = im
+	}
+	for _, size := range []int{16, 32, 256} {
+		if layers[size] == nil {
+			return nil, fmt.Errorf("ICO export is missing the %dx%d layer", size, size)
+		}
+	}
+	return layers, nil
+}
+
+func validatePNG(data []byte, minSize, maxSize int) (image.Image, error) {
+	config, err := png.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	if config.Width != config.Height || config.Width < minSize || config.Width > maxSize {
+		return nil, fmt.Errorf("expected a square PNG between %d and %d pixels", minSize, maxSize)
+	}
+	im, err := png.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, err
+	}
+	var transparent, visible bool
+	for y := 0; y < config.Height; y++ {
+		for x := 0; x < config.Width; x++ {
+			_, _, _, alpha := im.At(x, y).RGBA()
+			transparent = transparent || alpha == 0
+			visible = visible || alpha != 0
+			if transparent && visible {
+				return im, nil
+			}
+		}
+	}
+	return nil, errors.New("icon must contain both transparent and visible pixels")
+}
+
+func samePixels(a, b image.Image) bool {
+	if a.Bounds() != b.Bounds() {
+		return false
+	}
+	for y := a.Bounds().Min.Y; y < a.Bounds().Max.Y; y++ {
+		for x := a.Bounds().Min.X; x < a.Bounds().Max.X; x++ {
+			ar, ag, ab, aa := a.At(x, y).RGBA()
+			br, bg, bb, ba := b.At(x, y).RGBA()
+			if ar != br || ag != bg || ab != bb || aa != ba {
+				return false
+			}
+		}
+	}
+	return true
 }
 
 func commandIn(dir, name string, args ...string) error {
@@ -252,155 +328,4 @@ func versionParts(v string) (string, error) {
 		}
 	}
 	return strings.Join(m[1:], ",") + ",0", nil
-}
-func parseSVG(b []byte) ([]shape, error) {
-	d := xml.NewDecoder(bytes.NewReader(b))
-	var out []shape
-	clips := map[string]*shape{}
-	clipID := ""
-	for {
-		tok, err := d.Token()
-		if errors.Is(err, io.EOF) {
-			break
-		}
-		if err != nil {
-			return nil, err
-		}
-		if end, ok := tok.(xml.EndElement); ok && end.Name.Local == "clipPath" {
-			if clips[clipID] == nil {
-				return nil, errors.New("SVG clipPath requires one rect or circle")
-			}
-			clipID = ""
-		}
-		s, ok := tok.(xml.StartElement)
-		if !ok {
-			continue
-		}
-		a := map[string]string{}
-		for _, v := range s.Attr {
-			a[v.Name.Local] = v.Value
-		}
-		if s.Name.Local == "clipPath" {
-			if clipID != "" || a["id"] == "" || clips[a["id"]] != nil {
-				return nil, errors.New("SVG clipPath requires a unique ID and cannot be nested")
-			}
-			clipID = a["id"]
-			continue
-		}
-		if s.Name.Local != "rect" && s.Name.Local != "circle" {
-			continue
-		}
-		n := func(k string) float64 { v, _ := strconv.ParseFloat(a[k], 64); return v }
-		c := strings.TrimPrefix(a["fill"], "#")
-		if clipID != "" {
-			c = "000000" // Clip geometry is never painted.
-		}
-		v, e := strconv.ParseUint(c, 16, 24)
-		if e != nil || len(c) != 6 {
-			return nil, errors.New("SVG fills must be six-digit RGB")
-		}
-		p := shape{kind: s.Name.Local, x: n("x"), y: n("y"), w: n("width"), h: n("height"), r: n("rx"), c: color.NRGBA{uint8(v >> 16), uint8(v >> 8), uint8(v), 255}}
-		if p.kind == "circle" {
-			p.x, p.y, p.r = n("cx"), n("cy"), n("r")
-		}
-		if ref := a["clip-path"]; ref != "" {
-			if clipID != "" || !strings.HasPrefix(ref, "url(#") || !strings.HasSuffix(ref, ")") {
-				return nil, errors.New("SVG clip-path must reference local un-clipped geometry")
-			}
-			p.clipID = strings.TrimSuffix(strings.TrimPrefix(ref, "url(#"), ")")
-		}
-		if clipID != "" {
-			if clips[clipID] != nil {
-				return nil, errors.New("SVG clipPath supports only one shape")
-			}
-			clips[clipID] = &p
-			continue
-		}
-		out = append(out, p)
-	}
-	for i := range out {
-		if out[i].clipID != "" {
-			out[i].clip = clips[out[i].clipID]
-			if out[i].clip == nil {
-				return nil, errors.New("SVG clip-path references missing geometry")
-			}
-		}
-	}
-	if len(out) == 0 {
-		return nil, errors.New("SVG has no supported vector shapes")
-	}
-	return out, nil
-}
-func (p shape) contains(x, y float64) bool {
-	if p.clip != nil && !p.clip.contains(x, y) {
-		return false
-	}
-	if p.kind == "circle" {
-		return math.Pow(x-p.x, 2)+math.Pow(y-p.y, 2) <= p.r*p.r
-	}
-	if x < p.x || y < p.y || x >= p.x+p.w || y >= p.y+p.h {
-		return false
-	}
-	if p.r <= 0 {
-		return true
-	}
-	cx := math.Max(p.x+p.r, math.Min(x, p.x+p.w-p.r))
-	cy := math.Max(p.y+p.r, math.Min(y, p.y+p.h-p.r))
-	return (x-cx)*(x-cx)+(y-cy)*(y-cy) <= p.r*p.r
-}
-func raster(shapes []shape, size int) *image.NRGBA {
-	im := image.NewNRGBA(image.Rect(0, 0, size, size))
-	const samples = 4
-	for y := 0; y < size; y++ {
-		for x := 0; x < size; x++ {
-			var r, g, b, a uint32
-			for sy := 0; sy < samples; sy++ {
-				for sx := 0; sx < samples; sx++ {
-					px := (float64(x) + (float64(sx)+.5)/samples) * 64 / float64(size)
-					py := (float64(y) + (float64(sy)+.5)/samples) * 64 / float64(size)
-					var c color.NRGBA
-					for _, s := range shapes {
-						if s.contains(px, py) {
-							c = s.c
-						}
-					}
-					r += uint32(c.R) * uint32(c.A)
-					g += uint32(c.G) * uint32(c.A)
-					b += uint32(c.B) * uint32(c.A)
-					a += uint32(c.A)
-				}
-			}
-			if a > 0 {
-				im.SetNRGBA(x, y, color.NRGBA{uint8(r / a), uint8(g / a), uint8(b / a), uint8(a / (samples * samples))})
-			}
-		}
-	}
-	return im
-}
-func makeICO(shapes []shape) ([]byte, error) {
-	images := make([][]byte, len(sizes))
-	for i, s := range sizes {
-		var b bytes.Buffer
-		if e := png.Encode(&b, raster(shapes, s)); e != nil {
-			return nil, e
-		}
-		images[i] = b.Bytes()
-	}
-	b := new(bytes.Buffer)
-	binary.Write(b, binary.LittleEndian, uint16(0))
-	binary.Write(b, binary.LittleEndian, uint16(1))
-	binary.Write(b, binary.LittleEndian, uint16(len(sizes)))
-	offset := uint32(6 + 16*len(sizes))
-	for i, s := range sizes {
-		b.Write([]byte{byte(s % 256), byte(s % 256), 0, 0})
-		binary.Write(b, binary.LittleEndian, uint16(1))
-		binary.Write(b, binary.LittleEndian, uint16(32))
-		binary.Write(b, binary.LittleEndian, uint32(len(images[i])))
-		binary.Write(b, binary.LittleEndian, offset)
-		offset += uint32(len(images[i]))
-	}
-	for _, im := range images {
-		b.Write(im)
-	}
-	return b.Bytes(), nil
 }
