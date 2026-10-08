@@ -96,7 +96,17 @@ func TestIconValidationRejectsDamagedExports(t *testing.T) {
 		"payload-outside-file":   func(b []byte) []byte { binary.LittleEndian.PutUint32(b[18:22], 0xfffffff0); return b },
 		"corrupt-png":            func(b []byte) []byte { b[binary.LittleEndian.Uint32(b[18:22])] = 0; return b },
 		"overlapping-layers":     func(b []byte) []byte { copy(b[22:38], b[6:22]); return b },
-		"missing-scales":         func(b []byte) []byte { binary.LittleEndian.PutUint16(b[4:6], 1); return b },
+		"duplicate-size-separate-payload": func(b []byte) []byte {
+			// Replace the optional 24px layer with another 32px layer, using
+			// a separate payload so range checks alone cannot catch it.
+			entry := bytes.Clone(b[6:22])
+			length := binary.LittleEndian.Uint32(entry[8:12])
+			start := binary.LittleEndian.Uint32(entry[12:16])
+			copy(b[38:54], entry)
+			binary.LittleEndian.PutUint32(b[50:54], uint32(len(b)))
+			return append(b, b[start:start+length]...)
+		},
+		"missing-scales": func(b []byte) []byte { binary.LittleEndian.PutUint16(b[4:6], 1); return b },
 	} {
 		t.Run(name, func(t *testing.T) {
 			if _, err := validateICO(mutate(bytes.Clone(data))); err == nil {

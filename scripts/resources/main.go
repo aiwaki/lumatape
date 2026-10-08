@@ -223,6 +223,9 @@ func validateICO(data []byte) (map[int]image.Image, error) {
 		if im.Bounds().Dx() != w || im.Bounds().Dy() != h {
 			return nil, fmt.Errorf("ICO layer %d dimensions differ from its directory entry", i)
 		}
+		if layers[w] != nil {
+			return nil, fmt.Errorf("ICO export contains duplicate %dx%d layers", w, w)
+		}
 		layers[w] = im
 	}
 	for _, size := range []int{16, 32, 256} {
