@@ -1,8 +1,16 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LumaTape: CRT screen with a shifted signal stripe">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-label="LumaTape: CRT screen with a colourful test pattern">
   <title>LumaTape</title>
   <rect x="3" y="7" width="58" height="50" rx="13" fill="#17231C"/>
   <rect x="5" y="9" width="54" height="44" rx="11" fill="#EBEEDC"/>
   <rect x="10" y="14" width="44" height="32" rx="7" fill="#17231C"/>
-  <rect x="15" y="25" width="29" height="7" fill="#C5F467"/>
-  <rect x="37" y="29" width="12" height="7" fill="#C5F467"/>
+  <rect x="11" y="18" width="6" height="20" fill="#F4F1DE"/>
+  <rect x="17" y="18" width="6" height="20" fill="#F4D64E"/>
+  <rect x="23" y="18" width="6" height="20" fill="#56D9D6"/>
+  <rect x="29" y="18" width="6" height="20" fill="#8BDB61"/>
+  <rect x="35" y="18" width="6" height="20" fill="#DC79C9"/>
+  <rect x="41" y="18" width="6" height="20" fill="#ED735C"/>
+  <rect x="47" y="18" width="6" height="20" fill="#727BD5"/>
+  <rect x="11" y="38" width="14" height="4" fill="#343D46"/>
+  <rect x="25" y="38" width="14" height="4" fill="#ABB4B0"/>
+  <rect x="39" y="38" width="14" height="4" fill="#F4F1DE"/>
 </svg>

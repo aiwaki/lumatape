@@ -1,7 +1,7 @@
 param(
   [Parameter(Mandatory=$true)][string]$PublicKeyFile,
   [Parameter(Mandatory=$true)][string]$PublishedAt,
-  [string]$Version='0.3.1',
+  [string]$Version='0.3.2',
   [string]$Commit='working-tree',
   [string]$BuildTime='unknown',
   [string]$NativeFrom='',

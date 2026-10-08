@@ -9,14 +9,16 @@
 </div>
 
 LumaTape adds CRT/VHS effects over a game window: TV scanlines, a soft glow,
-and videotape distortion. It has five presets and supports your own effects.
-You can also give the screen rounded corners or a curved shape.
+and videotape distortion. Five presets come in the box, and you can add your own
+effects to the collection. You can also give the screen rounded corners or
+a curved shape, like an old TV.
+No need to haul the TV down from the attic.
 
 LumaTape is free and open source, for Windows 10/11 x64.
-You control it from the system tray; there is no separate settings window.
+Your remote control lives in the system tray; there is no separate settings window.
 The UI follows the Windows display language: Russian or English.
 
-## Install and start
+## Switch it on
 
 1. Download and run `LumaTape_<version>_x64-setup.exe` from the
    [latest release](https://github.com/aiwaki/lumatape/releases/latest).
@@ -30,7 +32,8 @@ The UI follows the Windows display language: Russian or English.
 4. "Turn off" removes the effect and restores changes made by LumaTape.
    "Quit" closes the application.
 
-To try it without a game, open "Tools → Test scene" and select it under "Game".
+You can start by playing with the test picture: open "Tools → Test scene"
+and select it under "Game". You don't need a game for this.
 F11 makes the test scene fullscreen; Escape returns it to a window.
 
 ## Shortcuts
@@ -42,7 +45,7 @@ F11 makes the test scene fullscreen; Escape returns it to a window.
 
 Existing shortcuts are preserved. See them under "Settings → Hotkeys".
 
-## Your own effects
+## Your effect collection
 
 Choose "Add effect from file…" and open `.lumatape.glsl`. Once checked, it appears
 under "Effect". The [guide](docs/shaders/README.en.md) has examples and an AI prompt

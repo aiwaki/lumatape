@@ -1,6 +1,6 @@
 [package]
 name = "lumatape-desktop"
-version = "0.3.1"
+version = "0.3.2"
 description = "LumaTape CRT and VHS settings"
 authors = ["aiwaki"]
 license = "MIT"

@@ -1,4 +1,4 @@
-param([string]$Version='0.3.1',[string]$Commit='working-tree',[string]$BuildTime='unknown',[string]$NativeFrom='',[string]$LicenseFrom='',[string]$WindowsSdkVersion='')
+param([string]$Version='0.3.2',[string]$Commit='working-tree',[string]$BuildTime='unknown',[string]$NativeFrom='',[string]$LicenseFrom='',[string]$WindowsSdkVersion='')
 $ErrorActionPreference='Stop'
 $updateChannel='unconfigured'
 $hasUpdateEndpoint=-not [string]::IsNullOrEmpty($env:LUMATAPE_UPDATE_ENDPOINT)
