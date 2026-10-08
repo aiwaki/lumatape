@@ -48,17 +48,8 @@ Existing shortcuts are preserved. See them under "Settings → Hotkeys".
 ## Your effect collection
 
 Choose "Add effect from file…" and open `.lumatape.glsl`. Once checked, it appears
-under "Effect". The [guide](docs/shaders/README.en.md) has examples and an AI prompt
-if you want to create your own file. LumaTape itself makes no AI requests.
-
-## Updates and help
-
-Check for a new version through "Tools → Check for updates…". Installation requires
-confirmation. Update a portable ZIP copy by extracting the new package separately.
-
-If something goes wrong, open "Tools → Last error…" or "Copy diagnostics".
-Diagnostics are never sent automatically.
-[Report an issue](https://github.com/aiwaki/lumatape/issues) · [Settings and documentation](docs/README.en.md)
+under "Effect".
+The [guide](docs/shaders/README.en.md) has examples and a ready-to-use AI prompt.
 
 Requires Windows 10 version 2004 or later, x64, OpenGL 3.3, and SDR.
 Run games in windowed or borderless mode; HDR and exclusive fullscreen
@@ -66,4 +57,4 @@ are unsupported.
 This is a preview. It has been tested in Windows through Parallels; physical GPU
 support and real-game compatibility still need validation.
 
-[MIT](LICENSE) · [Component licenses](third_party/README.en.md)
+[Documentation](docs/README.en.md) · [MIT](LICENSE) · [Component licenses](third_party/README.en.md)

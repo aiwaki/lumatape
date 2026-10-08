@@ -46,6 +46,29 @@ func TestIconScalesHaveTransparentMarginAndVisibleBody(t *testing.T) {
 		}
 	}
 }
+
+func TestSVGClipPreservesStraightBandsAndTransparentCorners(t *testing.T) {
+	shapes, err := parseSVG([]byte(`<svg><defs><clipPath id="tile"><rect x="10" y="10" width="44" height="44" rx="8"/></clipPath></defs><rect x="0" y="0" width="32" height="64" fill="#FF0000" clip-path="url(#tile)"/><rect x="32" y="0" width="32" height="64" fill="#0000FF" clip-path="url(#tile)"/></svg>`))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(shapes) != 2 {
+		t.Fatal("clip geometry must not become a painted shape")
+	}
+	im := raster(shapes, 64)
+	for _, point := range [][2]int{{0, 32}, {63, 32}, {10, 10}, {53, 53}} {
+		if im.NRGBAAt(point[0], point[1]).A != 0 {
+			t.Fatalf("clip must leave %v transparent", point)
+		}
+	}
+	for _, y := range []int{12, 32, 51} {
+		left, right := im.NRGBAAt(31, y), im.NRGBAAt(32, y)
+		if left.R != 255 || left.B != 0 || left.A != 255 || right.R != 0 || right.B != 255 || right.A != 255 {
+			t.Fatalf("clip changed the straight colour boundary at y=%d", y)
+		}
+	}
+}
+
 func TestVersionCannotInjectResourceSource(t *testing.T) {
 	for _, bad := range []string{"1.2", "1.2.3\"", "65536.0.0", "1.0.0\n101 ICON whatever"} {
 		if _, e := versionParts(bad); e == nil {

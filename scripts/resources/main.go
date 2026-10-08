@@ -31,6 +31,8 @@ type shape struct {
 	kind          string
 	x, y, w, h, r float64
 	c             color.NRGBA
+	clipID        string
+	clip          *shape
 }
 
 func main() {
@@ -254,6 +256,8 @@ func versionParts(v string) (string, error) {
 func parseSVG(b []byte) ([]shape, error) {
 	d := xml.NewDecoder(bytes.NewReader(b))
 	var out []shape
+	clips := map[string]*shape{}
+	clipID := ""
 	for {
 		tok, err := d.Token()
 		if errors.Is(err, io.EOF) {
@@ -262,19 +266,35 @@ func parseSVG(b []byte) ([]shape, error) {
 		if err != nil {
 			return nil, err
 		}
+		if end, ok := tok.(xml.EndElement); ok && end.Name.Local == "clipPath" {
+			if clips[clipID] == nil {
+				return nil, errors.New("SVG clipPath requires one rect or circle")
+			}
+			clipID = ""
+		}
 		s, ok := tok.(xml.StartElement)
 		if !ok {
-			continue
-		}
-		if s.Name.Local != "rect" && s.Name.Local != "circle" {
 			continue
 		}
 		a := map[string]string{}
 		for _, v := range s.Attr {
 			a[v.Name.Local] = v.Value
 		}
+		if s.Name.Local == "clipPath" {
+			if clipID != "" || a["id"] == "" || clips[a["id"]] != nil {
+				return nil, errors.New("SVG clipPath requires a unique ID and cannot be nested")
+			}
+			clipID = a["id"]
+			continue
+		}
+		if s.Name.Local != "rect" && s.Name.Local != "circle" {
+			continue
+		}
 		n := func(k string) float64 { v, _ := strconv.ParseFloat(a[k], 64); return v }
 		c := strings.TrimPrefix(a["fill"], "#")
+		if clipID != "" {
+			c = "000000" // Clip geometry is never painted.
+		}
 		v, e := strconv.ParseUint(c, 16, 24)
 		if e != nil || len(c) != 6 {
 			return nil, errors.New("SVG fills must be six-digit RGB")
@@ -283,7 +303,28 @@ func parseSVG(b []byte) ([]shape, error) {
 		if p.kind == "circle" {
 			p.x, p.y, p.r = n("cx"), n("cy"), n("r")
 		}
+		if ref := a["clip-path"]; ref != "" {
+			if clipID != "" || !strings.HasPrefix(ref, "url(#") || !strings.HasSuffix(ref, ")") {
+				return nil, errors.New("SVG clip-path must reference local un-clipped geometry")
+			}
+			p.clipID = strings.TrimSuffix(strings.TrimPrefix(ref, "url(#"), ")")
+		}
+		if clipID != "" {
+			if clips[clipID] != nil {
+				return nil, errors.New("SVG clipPath supports only one shape")
+			}
+			clips[clipID] = &p
+			continue
+		}
 		out = append(out, p)
+	}
+	for i := range out {
+		if out[i].clipID != "" {
+			out[i].clip = clips[out[i].clipID]
+			if out[i].clip == nil {
+				return nil, errors.New("SVG clip-path references missing geometry")
+			}
+		}
 	}
 	if len(out) == 0 {
 		return nil, errors.New("SVG has no supported vector shapes")
@@ -291,6 +332,9 @@ func parseSVG(b []byte) ([]shape, error) {
 	return out, nil
 }
 func (p shape) contains(x, y float64) bool {
+	if p.clip != nil && !p.clip.contains(x, y) {
+		return false
+	}
 	if p.kind == "circle" {
 		return math.Pow(x-p.x, 2)+math.Pow(y-p.y, 2) <= p.r*p.r
 	}

@@ -18,6 +18,11 @@ React prototypes and standalone Go/Win32 interface are not its current UI.
 | Understand display-mode changes | [Display](../internal/display/README.en.md) |
 | Check dependency licenses | [Third-party notices](../third_party/README.en.md) |
 
+## Updates
+
+Check for a new version through "Tools → Check for updates…". Installation requires
+confirmation. Update a portable ZIP copy by extracting the new package separately.
+
 ## Image settings
 
 **Processing.** New profiles use Auto: GPU first, then compatible CPU processing
@@ -90,6 +95,9 @@ The tray uses 100% when an effect is explicitly selected or enabled; simply
 reading an older profile does not overwrite its values.
 
 ## Diagnostics and limitations
+
+If something goes wrong, open "Tools → Last error…".
+[Report an issue](https://github.com/aiwaki/lumatape/issues).
 
 “Copy diagnostics” excludes screenshots, full paths, shader code and other
 windows' titles; nothing is sent automatically. The local JSON log uses a bounded
