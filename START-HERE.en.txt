@@ -1,0 +1,51 @@
+LumaTape 0.3.1 · Windows x64 · Preview
+English · Русский: START-HERE.txt
+
+FIRST LAUNCH
+1. Install LumaTape with LumaTape_0.3.1_x64-setup.exe.
+   For a portable copy, extract the entire ZIP and open lumatape.exe;
+   keep the engine folder and all its files beside it.
+2. Open a game in windowed or borderless mode.
+3. Left- or right-click the LumaTape icon in the Windows notification
+   area and select the game window under Game.
+4. Choose an Effect, then Turn on, and return to the game.
+   Try VHS Tape for a first look.
+
+Everything is controlled from the tray; there is no separate settings window.
+If Windows hides the icon, open the notification area's overflow menu.
+The menu follows the Windows display language at launch:
+Russian for RU, English for other languages.
+
+TURNING IT OFF
+Turn off removes the effect and restores window/display-mode changes
+made by LumaTape. Quit closes the application.
+New-profile shortcuts:
+  Ctrl+Shift+9 — turn the effect on / off.
+  Ctrl+Shift+0 — emergency off and restore.
+Existing shortcuts are preserved; see them under Settings → Hotkeys.
+
+TRY IT WITHOUT A GAME
+Tools → Test scene opens a test window. Select it under Game.
+F11 or Alt+Enter makes it fullscreen; Escape returns it to a window.
+
+ADD YOUR OWN EFFECT
+Add effect from file… opens .lumatape.glsl.
+After validation, it appears in the menu; a failed import keeps the working effect.
+Examples and a ready-to-use AI prompt: docs/shaders/README.en.md.
+LumaTape itself makes no AI requests.
+
+UPDATES AND HELP
+Tools → Check for updates… checks for a new version.
+Installing an update requires confirmation. Update a ZIP copy by extracting
+a new package separately; settings are saved outside the application folder.
+Tools → Last error… shows the reason for a failure.
+Copy diagnostics copies text; you decide whether to send it.
+Settings and limitations: docs/README.en.md.
+Report a problem: https://github.com/aiwaki/lumatape/issues
+
+COMPATIBILITY
+Windows 10 version 2004 or later, x64, OpenGL 3.3, SDR.
+Games must run in windowed or borderless mode; HDR and exclusive fullscreen
+are unsupported. WebView2 and development tools are not required to run the app.
+This is a preview: it has been tested in Windows through Parallels; physical GPU
+support and real-game compatibility still need validation.

@@ -204,13 +204,14 @@ def copy_support_files(destination: Path, licenses: Path):
     binaries, local checkpoint, build status or package manifests are copied.
     """
     copy_licenses(licenses, destination / 'licenses')
-    for name in ('LICENSE', 'README.md', 'README.en.md', 'START-HERE.txt', 'assets/lumatape.svg', 'assets/lumatape.ico', 'third_party/README.md', 'desktop/src-tauri/README.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub'):
+    for name in ('LICENSE', 'README.md', 'README.en.md', 'START-HERE.txt', 'START-HERE.en.txt', 'assets/lumatape.svg', 'assets/lumatape.ico', 'third_party/README.md', 'third_party/README.en.md', 'desktop/src-tauri/README.md', 'desktop/src-tauri/README.en.md', 'cmd/lumatape-testcard/README.md', 'cmd/lumatape-testcard/README.en.md', 'internal/control/README.md', 'internal/control/README.en.md', 'internal/display/README.md', 'internal/display/README.en.md', 'internal/pointer/README.md', 'internal/pointer/README.en.md', 'native/capture/README.md', 'native/capture/README.en.md', 'scripts/windows-control-smoke/README.md', 'scripts/windows-control-smoke/README.en.md', 'scripts/windows-ui-smoke/README.md', 'scripts/windows-ui-smoke/README.en.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub'):
         dest = destination / name
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, dest)
-    for name in ('README.md', 'WINDOWS_VALIDATION.md', 'PARALLELS_SMOKE.md', 'ARCHITECTURE.md', 'PRIOR_ART_AUDIT.md', 'SHADER_SPEC.md', 'UPDATES.md'):
-        (destination / 'docs').mkdir(exist_ok=True)
-        shutil.copyfile(ROOT / 'docs' / name, destination / 'docs' / name)
+    for name in ('README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'PARALLELS_SMOKE.md', 'ARCHITECTURE.md', 'PRIOR_ART_AUDIT.md', 'SHADER_SPEC.md', 'UPDATES.md'):
+        target = destination / 'docs' / name
+        target.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copyfile(ROOT / 'docs' / name, target)
     for name in ('amber-crt.lumatape.glsl', 'cold-bleed.lumatape.glsl'):
         dest = destination / 'examples' / 'shaders' / name
         dest.parent.mkdir(parents=True, exist_ok=True)

@@ -26,12 +26,12 @@ class DesktopPackageTests(unittest.TestCase):
         previous = package_desktop.ROOT
         package_desktop.ROOT = self.root
         self.addCleanup(setattr, package_desktop, 'ROOT', previous)
-        for name in ['LICENSE', 'README.md', 'README.en.md', 'START-HERE.txt', 'assets/lumatape.svg', 'assets/lumatape.ico',
-                     'third_party/README.md', 'desktop/src-tauri/README.md', 'desktop/src-tauri/Cargo.lock',
-                     'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub',
+        for name in ['LICENSE', 'README.md', 'README.en.md', 'START-HERE.txt', 'START-HERE.en.txt', 'assets/lumatape.svg', 'assets/lumatape.ico',
+                     'third_party/README.md', 'third_party/README.en.md', 'desktop/src-tauri/README.md', 'desktop/src-tauri/README.en.md', 'desktop/src-tauri/Cargo.lock',
+                     'cmd/lumatape-testcard/README.md', 'cmd/lumatape-testcard/README.en.md', 'internal/control/README.md', 'internal/control/README.en.md', 'internal/display/README.md', 'internal/display/README.en.md', 'internal/pointer/README.md', 'internal/pointer/README.en.md', 'native/capture/README.md', 'native/capture/README.en.md', 'scripts/windows-control-smoke/README.md', 'scripts/windows-control-smoke/README.en.md', 'scripts/windows-ui-smoke/README.md', 'scripts/windows-ui-smoke/README.en.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub',
                      'desktop/package-lock.json', 'third_party/frontend-provenance.json']:
             self.write(name, b'test notice\n')
-        for name in ['README.md', 'WINDOWS_VALIDATION.md', 'PARALLELS_SMOKE.md', 'CURRENT_STATE.md', 'ARCHITECTURE.md', 'PRIOR_ART_AUDIT.md', 'SHADER_SPEC.md', 'UPDATES.md']:
+        for name in ['README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'PARALLELS_SMOKE.md', 'CURRENT_STATE.md', 'ARCHITECTURE.md', 'PRIOR_ART_AUDIT.md', 'SHADER_SPEC.md', 'UPDATES.md']:
             self.write('docs/' + name, b'Unqualified test fixture\n')
         for name in ['amber-crt.lumatape.glsl', 'cold-bleed.lumatape.glsl']:
             self.write('examples/shaders/' + name, b'Test shader fixture\n')
@@ -132,7 +132,7 @@ class DesktopPackageTests(unittest.TestCase):
         support = self.root/'installer-support'
         package_desktop.copy_support_files(support, self.args.licenses)
         self.assertTrue((support/'LICENSE').is_file())
-        for path in ['README.en.md', 'docs/README.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub']:
+        for path in ['README.en.md', 'START-HERE.en.txt', 'docs/README.md', 'docs/README.en.md', 'docs/shaders/README.md', 'docs/shaders/README.en.md', 'internal/pointer/README.en.md', 'native/capture/README.md', 'third_party/README.en.md', 'desktop/src-tauri/README.en.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub']:
             self.assertTrue((support/path).is_file(), path)
         self.assertTrue((support/'docs/UPDATES.md').is_file())
         self.assertTrue((support/'licenses/rust/manifest.json').is_file())

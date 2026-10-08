@@ -1,63 +1,87 @@
-# Projected system cursor
+# Проекция системного курсора
 
-This package changes only where the system cursor is drawn. The actual Windows
-cursor position, mouse messages, Raw Input, capture, button state, mouse speed and
-clip rectangle remain untouched. The image map locates the native hotspot on the
-same curved image that the renderer last presented.
+**Русский** · [English](README.en.md)
 
-The renderer calls `Start`, `Update(Frame)` after a successful swap, `Stop` before
-hiding/changing the surface, and `Close` on exit. `Update` retains one latest frame
-and never writes a pipe on the rendering thread. `Stop` is a generation barrier:
-a restore acknowledgement cannot be followed by an older queued frame. `Poll`
-latches native/transport failure; the application must hide the effect and close
-the session. `RestorationConfirmed` separately records a successful Stop barrier
-or verified post-exit fallback restore; the original error remains available.
-This permits safe-off while keeping the tray alive only when restoration is known.
-`Status` distinguishes an active projection from standby, which alone does not
-prove that an unexpired worker lease cannot reactivate.
+Этот пакет меняет только место отрисовки системного курсора. Настоящие
+координаты курсора Windows, сообщения мыши, Raw Input, захват мыши, состояние
+кнопок, скорость мыши и ограничивающий прямоугольник не меняются. Преобразование
+изображения размещает нативную активную точку курсора на том же искривлённом
+изображении, которое рендерер показал последним.
 
-The companion `lumatape-watchdog.exe --pointer-stdio` owns a dedicated native
-window and the Magnification runtime. It reads the real cursor independently
-of the 30-FPS capture path, with an 8-ms timer. A 500-ms frame lease, pipe EOF or
-parent exit restores the system cursor. Source/parent process creation identity,
-foreground ownership, physical client bounds and overlay identity/visibility are
-checked on each update. Expiry/failure requests hiding only the exact engine
-surface through `ShowWindowAsync`; a completely suspended engine might not apply
-that queued hide until it resumes, but cursor restoration does not wait for it.
+Рендерер вызывает `Start`, `Update(Frame)` после успешной смены буферов,
+`Stop` перед скрытием или изменением поверхности и `Close` при выходе.
+`Update` хранит один последний кадр и никогда не пишет в канал из потока
+рендеринга. `Stop` — барьер поколений: после подтверждения восстановления
+не может примениться более старый кадр из очереди. `Poll` фиксирует нативную
+ошибку или ошибку передачи; приложение должно скрыть эффект и закрыть сессию.
+`RestorationConfirmed` отдельно отмечает успешное завершение барьера Stop или
+проверенное резервное восстановление после выхода процесса; исходная ошибка
+остаётся доступной. Это позволяет оставить трей работающим после безопасного
+отключения только при подтверждённом восстановлении. `Status` различает
+активную проекцию и ожидание; одно состояние ожидания не доказывает, что ещё
+действующее разрешение рабочего процесса на кадр не сможет активировать
+проекцию снова.
 
-`MagShowSystemCursor` has global, non-reference-counted visibility. Our workers
-hold one named ownership mutex through restoration and runtime teardown, and
-recovery uses that same gate. Closing waits for confirmed child exit before a
-fallback show call; it never kills a worker that might still owe restoration.
-Coexistence with another application's cursor-hiding/magnification tool is not
-qualified. Killing both engine and companion is not a recoverable contract.
+Вспомогательный процесс `lumatape-watchdog.exe --pointer-stdio` владеет отдельным
+нативным окном и средой Magnification. Он читает реальные координаты курсора
+независимо от захвата изображения с частотой 30 кадров/с, по таймеру 8 мс.
+Истечение срока действия кадра в 500 мс, EOF канала или выход родительского
+процесса восстанавливают системный курсор. При каждом обновлении проверяются
+время создания процессов источника и родителя, принадлежность активного окна,
+физические границы клиентской области, идентичность и видимость оверлея.
+Истечение срока или ошибка запрашивает скрытие только конкретной поверхности
+движка через `ShowWindowAsync`; полностью приостановленный движок может
+не обработать этот запрос до возобновления, но восстановление курсора его
+не ждёт.
 
-Visibility handoff prepares the bitmap first, rechecks cursor eligibility, then
-hides the system cursor before showing the projected window. Restoration hides
-our HWND before showing the system cursor and retries incomplete operations.
-A partial show failure cannot escape cleanup just because the cached visibility
-flag is false. This orders Win32 operations; it does not promise atomic DWM
-presentation or observe a host macOS cursor when a VM keeps guest coordinates.
-There is no idle timeout or edge strip that hides a stationary game cursor.
+Видимость, управляемая `MagShowSystemCursor`, глобальна и не использует счётчик
+ссылок. Наши рабочие процессы удерживают один именованный мьютекс владения
+на протяжении восстановления и завершения среды; аварийное восстановление
+использует тот же механизм. Закрытие ждёт подтверждённого выхода дочернего
+процесса перед резервным вызовом показа курсора; оно никогда не завершает
+принудительно рабочий процесс, который ещё может быть обязан восстановить
+состояние. Совместная работа с чужими средствами скрытия курсора или увеличения
+экрана не проверена. Восстановление после принудительного завершения и движка,
+и вспомогательного процесса не гарантируется.
 
-The cursor window is click-through, does not activate and is excluded from
-capture. Current HCURSOR dimensions and hotspot are preserved; color alpha and
-ordinary monochrome masks are reconstructed from native black/white renders.
-XOR-inverting cursor pixels have no standard alpha representation and fail
-explicitly. Animated cursor frame timing is not currently reproduced. Hidden or
-touch-suppressed system cursors are not drawn; in-game software cursors remain
-part of the captured image. There are no hooks, input injection or pointer warps.
-When crop or the screen shape excludes the source pixel under the real cursor,
-projection pauses and restores the ordinary cursor without hiding the valid
-image. Source/focus/geometry/lease failures still invalidate the surface.
+При передаче видимости сначала подготавливается изображение курсора, затем
+повторно проверяется допустимость проекции, после чего системный курсор
+скрывается перед показом окна проекции. Восстановление скрывает наш HWND перед
+показом системного курсора и повторяет незавершённые операции. Частичный сбой
+показа не может обойти очистку только из-за ложного значения сохранённого
+флага видимости. Такой порядок упорядочивает операции Win32, но не обещает
+атомарного отображения через DWM и не наблюдает курсор macOS, когда виртуальная
+машина сохраняет гостевые координаты. Нет ни тайм-аута бездействия, ни полосы
+у края, которые скрывали бы неподвижный игровой курсор.
 
-For the independent developer helper, class `LumaTape.PointerProjection`, title
-`LumaTape pointer` carries read-only observations under `LumaTape.Pointer.*`:
+Окно курсора пропускает клики, не активируется и исключено из захвата.
+Сохраняются текущие размеры HCURSOR и активная точка; альфа-канал цветного
+курсора и обычные монохромные маски восстанавливаются из нативной отрисовки
+на чёрном и белом фоне. Для пикселей курсора с XOR-инверсией нет стандартного
+представления через альфа-канал; они вызывают явную ошибку. Времена кадров
+анимированных курсоров пока не воспроизводятся. Скрытые системные курсоры
+и курсоры, подавленные сенсорным вводом, не рисуются; программные курсоры игры
+остаются частью захваченного изображения. Здесь нет перехватчиков ввода,
+инъекции ввода или перемещения указателя. Когда обрезка или форма экрана
+исключает пиксель источника под настоящим курсором, проекция приостанавливается
+и возвращает обычный курсор, не скрывая корректное изображение. Ошибки
+источника, фокуса, геометрии или истечение срока кадра по-прежнему делают
+поверхность недействительной.
+
+Для независимого инструмента разработчика окно класса
+`LumaTape.PointerProjection` с заголовком `LumaTape pointer` предоставляет
+наблюдаемые свойства только для чтения с префиксом `LumaTape.Pointer.*`:
 `Active`, `Hidden`, `RealX/Y`, `ScreenX/Y`, `SourceHWND`, `SourcePID`, `Serial`,
-`CursorFlags`, `CursorHandle`. Signed physical coordinates are two's-complement
-pointer-sized values. Read `Observation` before/after: equal even values identify
-a coherent native update. The HWND is hidden but retained during standby/Stop;
-closing the worker destroys it. These properties are observation, not IPC or
-proof of the system cursor's actual visibility in a VM host.
+`CursorFlags`, `CursorHandle`. Знаковые физические координаты представлены
+в дополнительном коде значениями размера указателя. Читайте `Observation`
+до и после: одинаковые чётные значения обозначают согласованное нативное
+обновление. HWND скрыт, но сохраняется в состояниях ожидания и Stop; закрытие
+рабочего процесса уничтожает его. Эти свойства служат наблюдениями, а не IPC
+и не доказательством фактической видимости системного курсора на хосте
+виртуальной машины.
 
-An already-hidden renderer surface restores the ordinary cursor without enqueuing another asynchronous hide. This avoids a hide/show feedback race during first presentation or capture recovery; invalid source identity, focus, geometry and lease expiry still invalidate the displayed mapping.
+Уже скрытая поверхность рендерера восстанавливает обычный курсор, не ставя
+в очередь ещё одно асинхронное скрытие. Это предотвращает гонку с обратной
+связью между скрытием и показом при первом отображении или восстановлении
+захвата; неверная идентичность источника, фокус, геометрия и истечение срока
+кадра по-прежнему делают отображаемое преобразование недействительным.

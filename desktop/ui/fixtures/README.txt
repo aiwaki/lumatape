@@ -1,6 +1,8 @@
-Explicit browser demo fixtures only (?demo=1). Actual Mac CGL GLSL framebuffer readbacks; fixed intensity=100% and fixed scene, never live Windows capture or a simulation of arbitrary slider values. Production preview comes from the Go renderer. No images are synthesized by CSS.
+Русский · English: README.en.txt
 
-Reproduce the source images with:
+Изображения только для явно включённой браузерной демонстрации архивной панели (?demo=1). Это реальные снимки framebuffer GLSL через Mac CGL с фиксированными сценой и интенсивностью 100%, а не живой захват Windows или имитация произвольных значений ползунков. Предпросмотр архивной панели использует Go renderer. В текущем приложении только с треем встроенного предпросмотра нет. CSS не создаёт эти изображения.
+
+Повторное получение исходных изображений:
 LUMATAPE_SHADER_OUTPUT=artifacts/macos-ux-validation/regression sh scripts/validate-shaders-macos.sh
 
-polish-<preset>-<shape>.png maps to <preset>-<shape>.png here; original.png comes from vhs-tape-native-original.png. CRT Classic and Soft TV were refreshed for scale-aware Full rendering. Subtle CRT and both VHS presets/shapes remain byte-identical to the earlier fixtures. Provenance and A/B comparisons: artifacts/macos-ux-validation/summary.json and demo-fixture-updates.json. No preset control values changed.
+polish-<preset>-<shape>.png соответствует здешнему <preset>-<shape>.png; original.png получен из vhs-tape-native-original.png. CRT Classic и Soft TV обновлялись с учётом масштаба Full-рендера. Subtle CRT и оба VHS-пресета/формы побайтно совпадают с прежними изображениями. Локальные результаты и A/B-сравнения: artifacts/macos-ux-validation/summary.json и demo-fixture-updates.json. Значения параметров пресетов не менялись. Эти локальные артефакты не входят в публичный комплект.

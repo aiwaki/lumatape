@@ -1,63 +1,75 @@
-# Temporary monitor modes
+# Временные видеорежимы монитора
 
-This package is opt-in. Keep the desktop at its native resolution by default.
-`ListModes(device)` uses only `EnumDisplaySettingsW`; `Choose43` excludes 5:4,
-interlaced and lower-color modes, preserving the current reported refresh rate
-when one is available. Every requested mode is re-enumerated and tested with
-`CDS_TEST` by an independent watchdog before application.
+**Русский** · [English](README.en.md)
 
-Build and ship `cmd/lumatape-watchdog` as `lumatape-watchdog.exe` next to the app. The main
-process calls `StartSession`, which waits for a ready handshake over inherited
-anonymous pipes. The child captures the complete current `DEVMODEW` including
-returned private driver bytes **before** changing anything. The child owns both
-apply and restore, avoiding a crash gap between an external arm operation and a
-main-process display change. Dynamic `ChangeDisplaySettingsExW` uses flags zero:
-no registry update, custom resolution, unsafe mode or HDR setting is requested.
+Этот пакет используется только по явному выбору. По умолчанию сохраняйте
+родное разрешение рабочего стола. `ListModes(device)` использует только
+`EnumDisplaySettingsW`; `Choose43` исключает 5:4, чересстрочные режимы и режимы
+с пониженной глубиной цвета, по возможности сохраняя текущую заявленную частоту
+обновления. Перед применением независимый процесс восстановления повторно
+перечисляет каждый запрошенный режим и проверяет его через `CDS_TEST`.
 
-After a successful `StartSession`, immediately defer `Restore`. Show a user
-confirmation with a 15-second countdown using `Session.Deadline()`. The watchdog
-starts that window after successful apply/readback and sends the exact deadline
-to the parent. Only call `Confirm` on explicit user
-confirmation. Unconfirmed timeout, main-process pipe loss, a malformed request,
-output pipe failure, and normal exit all trigger conditional restoration. A
-confirmed session remains guarded until it ends. Restoration errors receive
-bounded retries for transient driver failures.
+Соберите `cmd/lumatape-watchdog` и поставляйте его как `lumatape-watchdog.exe`
+рядом с приложением. Основной процесс вызывает `StartSession`, который ждёт
+подтверждения готовности через унаследованные анонимные каналы. Дочерний процесс
+сохраняет полный текущий `DEVMODEW`, включая возвращённые закрытые данные
+драйвера, **до** каких-либо изменений. И применение, и восстановление выполняет
+дочерний процесс. Так исключается промежуток для сбоя между внешним включением
+защиты и изменением дисплея основным процессом. Динамический вызов
+`ChangeDisplaySettingsExW` использует нулевые флаги: он не запрашивает запись
+в реестр, пользовательское разрешение, небезопасный режим или изменение HDR.
 
-Poll `Session.Poll()` from the application's event loop. It returns immediately;
-`done` means restoration completed, ownership was relinquished after an external
-change, or the watchdog ended with an error. Clear the application's active
-session and confirmation UI when done. A terminal error persists across repeated
-`Poll`/`Restore` calls. The watchdog sends its terminal result only after recovery
-attempts finish; bare process EOF is never treated as successful restoration.
-`Restore` accepts a terminal reply already delivered by automatic rollback and
-also handles the race between such a reply and a broken-pipe write.
+Сразу после успешного `StartSession` отложите вызов `Restore` через defer.
+Покажите пользователю подтверждение с отсчётом 15 секунд по `Session.Deadline()`.
+Процесс восстановления начинает отсчёт после успешного применения и чтения
+результата, затем передаёт родителю точный срок. Вызывайте `Confirm` только
+после явного подтверждения пользователя. Истечение срока без подтверждения,
+потеря канала основного процесса, некорректный запрос, ошибка выходного канала
+и штатный выход запускают условное восстановление. Подтверждённая сессия
+остаётся под защитой до своего завершения. При ошибке восстановления число
+повторных попыток ограничено; они предназначены для временных сбоев драйвера.
 
-Restoration compares the current resolution, reported frequency, color depth,
-mode flags, rotation, position, scaling policy and panning size against the last
-applied state. Polling every 200 ms permanently relinquishes ownership as soon
-as a different state is observed. The same check occurs immediately before
-restore, including after the restoration `CDS_TEST`. This preserves independent
-user or application changes that are observed. Windows offers no atomic
-compare-and-set for display modes: an external change between the final query
-and the API call, or a change away and back within the polling interval, cannot
-be distinguished. Killing both application and watchdog, OS failure, and a
-failed graphics driver cannot be recovered by this process pair.
+Вызывайте `Session.Poll()` из цикла событий приложения. Метод возвращает
+управление сразу; `done` означает, что восстановление завершилось, владение
+режимом прекращено после внешнего изменения либо процесс восстановления
+завершился с ошибкой. В этом случае очистите активную сессию приложения
+и интерфейс подтверждения. Итоговая ошибка сохраняется при повторных вызовах
+`Poll`/`Restore`. Процесс восстановления отправляет итог только после завершения
+попыток восстановления; сам по себе EOF процесса никогда не считается успехом.
+`Restore` принимает итоговый ответ, уже доставленный автоматическим откатом,
+и обрабатывает гонку между таким ответом и записью в разорванный канал.
 
-A 4:3 mode does not prove correct GPU/panel aspect scaling. The app preserves
-the current scaling policy and cannot promise universal GPU scaling control.
-Verify the panel is not stretching the mode; prefer native desktop resolution
-plus a game's own 4:3 framebuffer when possible. This does not change any game's
-internal rendering resolution or FOV by itself.
+При восстановлении текущие разрешение, заявленная частота, глубина цвета,
+флаги режима, поворот, положение, политика масштабирования и размер области
+панорамирования сравниваются с последним применённым состоянием. Опрос каждые
+200 мс окончательно прекращает владение режимом, как только обнаружено другое
+состояние. Та же проверка выполняется непосредственно перед восстановлением,
+в том числе после восстановительного `CDS_TEST`. Это сохраняет замеченные
+независимые изменения пользователя или другого приложения. В Windows нет
+атомарной операции compare-and-set для видеорежимов: невозможно отличить
+внешнее изменение между последним чтением и вызовом API, а также изменение
+с последующим возвратом в пределах интервала опроса. Эта пара процессов
+не может восстановить состояние при одновременном завершении приложения
+и процесса восстановления, сбое ОС или отказе графического драйвера.
 
-Portable tests exercise timeout, confirmation, pipe EOF before/after
-confirmation, idempotent restoration, rejected modes, full-state retention and
-external mode/layout changes. Windows cross-compilation is not a runtime
-display-switching qualification. Before release, test real multi-monitor
-hardware with negative coordinates, refresh-rate changes, confirmation expiry,
-`taskkill /PID <main pid> /F` (without `/T`, which also kills the watchdog),
-disconnect/reconnect, independent changes and restart.
+Режим 4:3 не доказывает правильное сохранение пропорций видеокартой или
+монитором. Приложение сохраняет текущую политику масштабирования и не обещает
+универсального управления масштабированием GPU. Убедитесь, что монитор
+не растягивает изображение; по возможности используйте родное разрешение
+рабочего стола и собственный кадровый буфер игры 4:3. Сама смена видеорежима
+не меняет внутреннее разрешение рендеринга игры или её FOV.
 
-API references reviewed during implementation:
+Переносимые тесты проверяют тайм-аут, подтверждение, EOF канала до и после
+подтверждения, идемпотентное восстановление, отклонение режимов, сохранение
+полного состояния и внешние изменения режима или расположения мониторов.
+Кросс-компиляция для Windows не подтверждает переключение дисплея во время
+работы. Перед выпуском проверьте физическую конфигурацию с несколькими
+мониторами: отрицательные координаты, смену частоты, истечение срока
+подтверждения, `taskkill /PID <main pid> /F` (без `/T`, который также завершит
+процесс восстановления), отключение и подключение монитора, независимые
+изменения и повторный запуск.
+
+Документация API, изученная при реализации:
 
 - https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-enumdisplaysettingsw
 - https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-changedisplaysettingsexw

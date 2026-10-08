@@ -1,135 +1,145 @@
-# LumaTape settings frontend
+# Архивная панель настроек LumaTape
 
-React 19 + TypeScript + Vite 8 + Tailwind CSS 4, with real shadcn/ui components
-from the official registry. The desktop shell is Tauri; the system tray uses the
-native Windows menu. No CDN, remote fonts, analytics, or browser network API.
+**Русский** · [English](README.en.md)
 
-From `desktop/`:
+**Исторический код, а не текущий интерфейс продукта.** Сейчас LumaTape использует
+только нативный трей Tauri, без окна приложения, WebView и сборки frontend. Здесь
+сохранены прежняя панель и её браузерная демонстрация для разработки и сравнения.
+Описанное ниже поведение относится к этой архивной панели.
+
+React 19 + TypeScript + Vite 8 + Tailwind CSS 4, настоящие компоненты shadcn/ui
+из официального реестра. Прежде панель работала в оболочке Tauri; текущий трей
+использует нативное меню Windows без этого frontend. Нет CDN, удалённых шрифтов,
+аналитики или сетевого API браузера.
+
+Из `desktop/`:
 
 ```sh
 npm ci
 npm test
 npm run typecheck
 npm run dev:ui       # http://127.0.0.1:1420
-npm run build:ui     # desktop/dist, consumed by src-tauri frontendDist
-npm run preview:ui   # production output on the same local port
+npm run build:ui     # desktop/dist; archived UI only
+npm run preview:ui   # archived build output on the same local port
 ```
 
-`npm run dev` and `npm run build` remain Tauri commands. `package.json` and
-`package-lock.json` pin the dependencies. Development disables HMR/Fast Refresh
-so the Tauri CSP does not need inline scripts or eval; reload after an edit.
-Production uses hashed local JS/CSS/images and no inline scripts.
+`npm run dev` и `npm run build` остаются командами Tauri. Зависимости закреплены
+в `package.json` и `package-lock.json`. При разработке HMR/Fast Refresh отключён,
+чтобы CSP Tauri не требовал inline-скриптов или eval; после правки перезагрузите
+страницу. Архивная production-сборка использует локальные JS/CSS/изображения
+с хешами в именах и без inline-скриптов.
 
-## Components and provenance
+## Компоненты и происхождение
 
-`components/ui/*.tsx` were installed by the official **shadcn CLI 4.21.3** on
-2026-10-06, with `components.json` style `new-york` (Radix, new-york-v4 registry):
+`components/ui/*.tsx` установлены официальным **shadcn CLI 4.21.3** 2026-10-06
+со стилем `new-york` в `components.json` (Radix, реестр new-york-v4):
 
 ```sh
 npx --yes shadcn@4.21.3 add button select slider switch tabs dialog tooltip card input badge label separator toggle-group progress alert -y
 ```
 
-Registry: <https://ui.shadcn.com/r/styles/new-york-v4/>
-Setup documentation: <https://ui.shadcn.com/docs/installation/vite>
-Upstream source: <https://github.com/shadcn-ui/ui>
-The complete MIT notice is retained in `third-party/shadcn-LICENSE.md` and in the
-distribution's third-party notices. React, Radix, Lucide and the CSS dependencies
-also retain their own notices through the packaging license collector.
+Реестр: <https://ui.shadcn.com/r/styles/new-york-v4/>
+Инструкция установки: <https://ui.shadcn.com/docs/installation/vite>
+Исходный проект: <https://github.com/shadcn-ui/ui>
+Полное уведомление MIT сохранено в `third-party/shadcn-LICENSE.md` и уведомлениях
+комплекта. React, Radix, Lucide и CSS-зависимости также сохраняют собственные
+уведомления через сборщик лицензий при упаковке.
 
-Local adaptations to generated components: `cn` imports use `lib/utils.ts`
-(clsx + tailwind-merge), and Slider forwards accessible names to each Radix
-thumb. The underlying accessible primitives and component implementations are
-not replaced by CSS lookalikes. Product layout/theme live in `App.tsx` and
-`styles.css`; copied component files remain separately identifiable.
+Локальные изменения компонентов: `cn` импортируется из `lib/utils.ts`
+(clsx + tailwind-merge), а Slider передаёт доступные названия каждому Radix thumb.
+Базовые доступные примитивы и реализации компонентов не заменены CSS-имитациями.
+Композиция и тема находятся в `App.tsx` и `styles.css`; скопированные компоненты
+остаются отдельно идентифицируемыми.
 
-## State and IPC
+## Состояние и IPC
 
-`state.mjs` retains the shared preset/source/config rules. `api.js` retains the
-Tauri invoke contract and structured backend errors. `controller.mjs` owns one
-immutable observable store, read by React with `useSyncExternalStore`. Request
-sequence numbers, disposal, timers and command ownership live outside render
-closures. Subscription cleanup invalidates late replies and frees every listener.
+`state.mjs` сохраняет общие правила пресетов, источников и конфигурации. `api.js`
+сохраняет контракт Tauri invoke и структурированные ошибки backend. `controller.mjs`
+владеет одним неизменяемым наблюдаемым хранилищем, которое React читает через
+`useSyncExternalStore`. Номера запросов, очистка, таймеры и владение командами
+находятся вне render-замыканий. Отписка отклоняет поздние ответы и освобождает
+всех слушателей.
 
-The Go engine owns configuration validation, capture, rendering, hotkey
-registration, saving and restoration. The frontend holds a separate draft until
-acknowledged Apply. Every `emergency_sequence` advance cancels the entire draft,
-including Aspect and source, and fences old requests and preview replies even
-when restoration fails. Apply always sends `expected_emergency_sequence`.
-The main flow selects a game window and a finished effect. Desktop effect
-selection, Start and preview use 100% intensity; no intensity or manual shader
-parameter sliders are shown. Loading a legacy profile does not rewrite it.
-Start sends one atomic Apply with the current draft and `enabled=true`.
-The single Off action cancels pending operations and restores owned window and
-display changes through the emergency IPC barrier. Native emergency shortcuts
-remain available. Shape, format and compatibility controls live in Settings.
-A disabled legacy monitor profile is preserved rather than used as the default
-game target. Full Auto negotiates GPU or capped CPU; the actual backend remains
-visible in diagnostics. Unavailable backends cannot be selected.
-Fatal engine events are terminal until explicit reconnection; late status replies
-cannot clear the error. Exact HWND/PID/process-creation source strings are kept.
+Go-движок отвечает за проверку конфигурации, захват, рендер, регистрацию клавиш,
+сохранение и восстановление. Frontend держит отдельный черновик до подтверждённого
+Apply. Каждый рост `emergency_sequence` отменяет весь черновик, включая формат
+и источник, и отсекает старые запросы и ответы предпросмотра даже при ошибке
+восстановления. Apply всегда передаёт `expected_emergency_sequence`.
+Основной сценарий — выбрать окно игры и готовый эффект. Выбор, запуск и предпросмотр
+используют интенсивность 100%; ручных ползунков интенсивности и параметров шейдера
+нет. Загрузка старого профиля не переписывает его. Запуск отправляет один атомарный
+Apply с текущим черновиком и `enabled=true`.
+Единое выключение отменяет ожидающие операции и восстанавливает собственные
+изменения окна/дисплея через аварийный IPC-барьер. Нативные аварийные клавиши
+остаются доступными. Форма, формат и совместимость находятся в настройках.
+Отключённый старый профиль монитора сохраняется, но не используется как игровая
+цель по умолчанию. Full Auto согласует GPU или ограниченный CPU; фактическая
+обработка видна в диагностике. Недоступную обработку выбрать нельзя.
+Фатальные события движка остаются конечным состоянием до явного переподключения;
+поздний статус не снимает ошибку. Точные идентификаторы HWND/PID/создания процесса
+сохраняются.
 
-Hotkey receipt is separate from registration and pending key edits. Probe counters
-show real received events since opening the probe or applying a changed profile.
-The tray status comes from `host_status`/`host_status_changed`; a tray failure is
-shown without discarding the engine snapshot. Host errors are not treated as
-successful engine actions.
+Получение клавиши отделено от регистрации и ожидающих правок. Счётчики показывают
+реальные события после открытия проверки или применения другого профиля.
+Состояние трея приходит из `host_status`/`host_status_changed`; его ошибка видна
+без потери snapshot движка. Ошибка оболочки не считается успешным действием движка.
 
-## Preview and explicit browser demo
+## Предпросмотр и явная демонстрация в браузере
 
-Production preview is visible on the Air panel and resumes independently after Off/recovery. Hidden panels request no frames; opening settings does not start a second renderer.
-It calls the actual Go renderer: one PNG request at a time,
-640×360, at most two requests per second. A/B does not modify the live filter.
-Preview intentionally demonstrates the draft even while the live filter is off;
-desktop preview uses the finished effect at 100%. It previews shader/shape, not a game
-capture or window/display geometry. Verify 4:3/Fit/Crop/DAR on the actual source.
+Предпросмотр архивной панели виден на экране «Эфир» и независимо возобновляется
+после выключения/восстановления. Скрытые панели не запрашивают кадры; открытие
+настроек не запускает второй renderer. Используется реальный Go renderer:
+один PNG-запрос одновременно, 640×360, максимум два запроса в секунду. A/B не меняет
+живой фильтр. Предпросмотр специально показывает черновик даже при выключенном
+фильтре; эффект показан на 100%. Он проверяет шейдер/форму, а не захват игры
+или геометрию окна/дисплея. 4:3/Fit/Crop/DAR проверяйте на настоящем источнике.
 
-Only the exact query `?demo=1` enables fixtures, with a visible demo banner.
-The fixture starts disabled with a demonstration game window and Full Auto.
-Without Tauri, a normal URL shows a connection error; it never silently falls
-back to data fixtures. Demo images are saved real CGL shader output, not new
-browser filters. They represent fixed 100% preset/shape examples; zero shows the
-original. Other slider values do not pretend to calculate a new shader result.
-Vite resolves the `new URL(..., import.meta.url)` fixture references to all 16
-hashed local PNG assets in both development and the production bundle.
+Только точный query `?demo=1` включает тестовые данные с видимым баннером.
+Демонстрация стартует выключенной, с тестовым игровым окном и Full Auto.
+Без Tauri обычный URL показывает ошибку подключения и не подменяет данные молча.
+Изображения — сохранённый реальный вывод CGL-шейдеров, а не браузерные фильтры.
+Это фиксированные примеры пресетов/форм на 100%; ноль показывает оригинал.
+Другие значения не имитируют новый результат шейдера. Vite преобразует ссылки
+`new URL(..., import.meta.url)` во все 16 локальных PNG с хешами как в dev,
+так и в собранном комплекте.
 
-## Visual direction and local font
+## Визуальное направление и локальный шрифт
 
-The selected 2026-10-07 Air prototype is now connected to the production controller.
-Its monitor, wordmark, channel counter, spacing, import action and footer use the
-original Air markup/styles. The five channel buttons are replaced by one Radix
-Select containing all built-in and imported effects, with scrolling and keyboard
-typeahead. The settings icon opens the full existing settings flow, including the
-game window, shape, 4:3, input mode, scaling/DAR, backend, shortcuts, restoration,
-diagnostics and updates. Escape or the settings action hides the panel to tray.
-The browser demo adds the prototype's outer frame; the native panel fills its window.
-Game selection applies immediately; other configuration edits keep explicit Apply
-semantics. Closing dialogs restores focus to their opener. The effect dropdown
-opens without animation; theme colors change atomically, and only pointer press
-feedback uses a short transform transition. Reduced motion disables it.
-Preview can compare while the live overlay is off and invalidates obsolete pixels
-when the draft changes. No intensity/manual parameter controls or extra Stop button
-were added. System light/dark themes and reduced motion remain supported.
+Выбранный 2026-10-07 прототип «Эфир» подключён к сохранённому контроллеру панели.
+Экран, логотип, номер канала, интервалы, импорт и нижняя панель используют исходные
+разметку и стили «Эфира». Пять кнопок каналов заменены одним Radix Select со всеми
+встроенными и импортированными эффектами, прокруткой и поиском вводом с клавиатуры.
+Значок настроек открывает сохранённый сценарий: окно игры, форма, 4:3, ввод,
+масштаб/DAR, обработка, клавиши, восстановление, диагностика и обновления.
+Escape или действие настроек скрывает панель в трей. Браузерная демонстрация
+добавляет внешнюю рамку прототипа; нативная панель заполняет окно.
+Выбор игры применяется сразу; другие правки требуют Apply. Закрытие диалога
+возвращает фокус открывшему его элементу. Список эффектов открывается без анимации;
+тема меняется атомарно, короткий transform используется только при нажатии.
+Reduced motion отключает его. Сравнение работает при выключенном оверлее и
+отбрасывает устаревшие пиксели после изменения черновика. Ручные параметры,
+интенсивность и дополнительный «Стоп» не добавлялись. Поддержка системной
+светлой/тёмной темы и reduced motion сохранена.
 
-For a deterministic large-library browser check, run `npm run dev:ui` and open
-`/tests/effect-picker-smoke.html`. This isolated fixture uses the real Select with
-55 effects, a long Cyrillic name and a visible selection output; it never connects
-to the engine and is not an entry in the release bundle.
+Для воспроизводимой проверки большой библиотеки запустите `npm run dev:ui`
+и откройте `/tests/effect-picker-smoke.html`. Изолированный пример использует
+реальный Select с 55 эффектами, длинным кириллическим названием и видимым
+результатом выбора; он не подключается к движку и не входит в релизный комплект.
 
-Mona Sans VF v2.0.27 is bundled locally in `assets/fonts/mona-sans.woff2`.
-Its provenance, pinned Git commit, SHA256 and unmodified upstream OFL notices
-are next to the file. Mona Sans has no Cyrillic glyphs: Russian uses the system
-SF/Segoe fallback. `third_party/frontend-provenance.json` adds the font to the
-existing distribution license collector. No font service is contacted.
+Mona Sans VF v2.0.27 поставляется локально в `assets/fonts/mona-sans.woff2`.
+Рядом находятся происхождение, закреплённый Git-коммит, SHA256 и неизменённые
+уведомления OFL. В Mona Sans нет кириллицы: русский использует системный
+SF/Segoe fallback. `third_party/frontend-provenance.json` включает шрифт
+в сборщик лицензий комплекта. Обращений к сервисам шрифтов нет.
 
-The complete pre-Universe frontend source and compiled output are preserved in
-`artifacts/ui-backups/pre-universe-20261007T084919Z.zip`; its manifest and sibling
-SHA256 file were verified before editing. Extract to a separate folder first;
-`desktop/ui` and `desktop/dist` in that snapshot reproduce the prior design.
+Локальные резервные копии сохраняют прежние варианты дизайна и сборки. Они
+не входят в публичный репозиторий или релиз. Для сравнения исторических
+`desktop/ui` и `desktop/dist` восстанавливайте их в отдельный каталог.
 
-
-The original 32 portable tests are preserved. Additional controller tests use
-controlled deferred replies and a fake clock to check unmount/retry cleanup,
-late source lists, fatal-state retention, draft edits during Apply, STOP during
-Apply/preview, recovery errors, pacing, dimensions, late PNG cancellation, and browser timer receivers.
-Portable tests and browser review do not qualify the Tauri/Go pipe, actual global
-hotkeys, restoration, update installation, or the Windows compositor.
+Исходные 32 переносимых теста сохранены. Дополнительные тесты контроллера используют
+управляемые отложенные ответы и искусственные часы: очистка unmount/retry,
+поздние списки источников, сохранение фатального состояния, правки черновика во время
+Apply, STOP во время Apply/предпросмотра, ошибки восстановления, частота, размеры,
+отмена позднего PNG и контекст вызова браузерных таймеров. Переносимые тесты и
+браузерная проверка не подтверждают каналы Tauri/Go, реальные глобальные клавиши,
+восстановление, установку обновления или композитор Windows.

@@ -1,75 +1,90 @@
-# Local renderer control, protocol v1
+# Локальное управление рендерером, протокол v1
 
-The Tauri host starts the exact bundled engine with `--control-stdio
---headless-settings --controller-pid <host PID>` and inherited stdin/stdout
-pipes. No network listener, shared endpoint or shell execution command exists.
-Without these flags the native settings/tray fallback remains.
+**Русский** · [English](README.en.md)
 
-Each UTF-8 line is one JSON object. Request:
+Оболочка Tauri запускает именно движок из своего комплекта с `--control-stdio
+--headless-settings --controller-pid <host PID>` и унаследованными каналами
+stdin/stdout. Сетевого сервера, общей точки подключения и команды для выполнения
+shell-команд нет. Без этих флагов сохраняется резервный нативный интерфейс
+настроек и трея.
+
+Каждая строка UTF-8 — один объект JSON. Запрос:
 `{"v":1,"id":"unique string","type":"snapshot","payload":{}}`.
-Response: `{"v":1,"id":"...","ok":true,"result":...}` or
+Ответ: `{"v":1,"id":"...","ok":true,"result":...}` или
 `{"v":1,"id":"...","ok":false,"error":{"code":"...","message":"...","applied":false,"unsaved":false},"result":...}`.
-Preserve the whole error envelope. A failed save can have `applied:true`, and
-result remains the authoritative post-operation snapshot. Never automatically
-retry a mutable request after an uncertain result.
+Сохраняйте весь объект ошибки. При ошибке сохранения возможно `applied:true`,
+а result остаётся достоверным снимком состояния после операции. Никогда не
+повторяйте автоматически запрос, меняющий состояние, если результат неизвестен.
 
-Events use `{"v":1,"event":"ready|state_changed|show_settings|fatal|stopped","data":...}`.
-`ready.data` is a snapshot. `state_changed` asks the host to refresh state and
-can be dropped under pressure. Replies/terminal events are not silently
-dropped: inability to deliver them stops the engine and requests cleanup.
+События имеют вид `{"v":1,"event":"ready|state_changed|show_settings|fatal|stopped","data":...}`.
+`ready.data` содержит снимок состояния. `state_changed` просит оболочку обновить
+состояние; при перегрузке это событие может быть отброшено. Ответы и завершающие
+события не теряются молча: невозможность доставить их останавливает движок
+и запрашивает освобождение ресурсов и восстановление.
 
-| Command | Payload | Result |
+| Команда | Данные запроса | Результат |
 | --- | --- | --- |
-| `snapshot` | `{}` | config, snake_case runtime, five presets `{name,effects}`, screen_shapes, hotkeys, exact source or null, confirmation_deadline RFC3339 or null |
-| `sources` | `{}` | windows `{id,hwnd,pid,process_created,title}` and monitors `{id,index,device,bounds,work_area,primary}` |
-| `apply` | `{config,source?,expected_emergency_sequence,expected_config?}` | Authoritative snapshot, also on failure |
-| `toggle`, `emergency`, `restore`, `confirm`, `reload` | `{}` | Authoritative snapshot |
+| `snapshot` | `{}` | config, runtime с именами полей в snake_case, пять пресетов `{name,effects}`, screen_shapes, hotkeys, точный источник или null, confirmation_deadline в RFC3339 или null |
+| `sources` | `{}` | Окна `{id,hwnd,pid,process_created,title}` и мониторы `{id,index,device,bounds,work_area,primary}` |
+| `apply` | `{config,source?,expected_emergency_sequence,expected_config?}` | Достоверный снимок состояния, в том числе при ошибке |
+| `toggle`, `emergency`, `restore`, `confirm`, `reload` | `{}` | Достоверный снимок состояния |
 | `preview` | `{config,width,height,time,before}` | `{mime:"image/png",width,height,png_base64}` |
-| `ui_state` | `{hwnd,visible}` | `{accepted:true}` after verifying host PID |
-| `diagnostics` | `{}` | Sanitized diagnostic object |
-| `quit` | `{}` | `{clean_shutdown:true}` only after cleanup |
+| `ui_state` | `{hwnd,visible}` | `{accepted:true}` после проверки PID оболочки |
+| `diagnostics` | `{}` | Диагностика с удалёнными чувствительными данными |
+| `quit` | `{}` | `{clean_shutdown:true}` только после освобождения ресурсов и восстановления |
 
-HWND/process creation time are strings, never JavaScript numbers. Treat source
-IDs as opaque and return the complete selected window object with config. The
-engine re-enumerates it, checks HWND/PID/creation identity, and uses its current
-title. Controller windows cannot be selected. Rectangles use
-`{x,y,width,height}` in physical pixels. A focused host window pauses the
-overlay; the engine does not activate a game or settings window itself.
+HWND и время создания процесса передаются строками, никогда не числами
+JavaScript. Считайте идентификаторы источников непрозрачными и возвращайте
+полный объект выбранного окна вместе с конфигурацией. Движок повторно
+перечисляет окна, проверяет HWND/PID/время создания и использует актуальный
+заголовок. Окна управляющей оболочки выбрать нельзя. Прямоугольники задаются
+как `{x,y,width,height}` в физических пикселях. Фокус на окне оболочки
+приостанавливает оверлей; движок сам не активирует игру или окно настроек.
 
-Preview invokes the same shader renderer on the locked initial GL thread.
-It enables a copy of the draft and sets only that copy's intensity to zero for
-the before image. PNG compression runs on a worker. Limits: 640×480, two
-requests per second, one outstanding request. Preview never changes live
-preferences or captures another application.
+Предпросмотр вызывает тот же рендерер шейдеров в исходном потоке GL,
+закреплённом за потоком ОС. Он включает копию черновика и только в этой копии
+устанавливает интенсивность в ноль для изображения «до». Сжатие PNG выполняется
+в фоновом потоке. Ограничения: 640×480, два запроса в секунду, один незавершённый
+запрос. Предпросмотр никогда не меняет действующие настройки и не захватывает
+другое приложение.
 
-Limits: 128 KiB input line, 2 MiB output line, 16 ordinary queued commands and
-responses. Quit/emergency have dedicated priority slots. Emergency cancels
-ordinary pending commands so old Apply requests cannot re-enable the effect.
-Stdin EOF/stdout failure signals shutdown independently of queue capacity.
-Native/render/config work runs only on the locked main thread.
+Ограничения: входная строка до 128 КиБ, выходная до 2 МиБ, очередь из 16 обычных
+команд и ответов. Для завершения и аварийного отключения выделены отдельные
+приоритетные слоты. Аварийное отключение отменяет ожидающие обычные команды,
+чтобы старые запросы Apply не включили эффект снова. EOF на stdin и ошибка
+stdout сигнализируют о завершении независимо от заполненности очереди.
+Нативные операции, рендеринг и работа с конфигурацией выполняются только
+в главном потоке, закреплённом за потоком ОС.
 
-Every snapshot includes `emergency_sequence` (initially 0). Every emergency
-invocation increments it before cleanup, including a failed restore or save.
-Apply must echo the sequence of the snapshot from which its draft was made.
-Missing or stale values return `stale_emergency_sequence` plus current snapshot
-before any mutation. On an increased sequence, discard the entire local draft;
-do not rebase an old queued Apply automatically. This closes the race where a
-request reaches the pipe after emergency already drained queued commands.
+Каждый снимок содержит `emergency_sequence` (изначально 0). Любой вызов
+аварийного отключения увеличивает его до начала восстановления и освобождения
+ресурсов, включая неудачное восстановление или сохранение. Apply должен
+передавать номер из снимка, на основе которого создан черновик. Отсутствующее
+или устаревшее значение возвращает `stale_emergency_sequence` и текущий снимок
+до любых изменений. При увеличении номера полностью отбросьте локальный
+черновик; не переносите автоматически старый Apply из очереди на новое
+состояние. Это устраняет гонку, при которой запрос попадает в канал уже после
+того, как аварийное отключение очистило очередь команд.
 
-New clients also echo the complete `snapshot.config` as `expected_config`.
-After the emergency barrier, the engine compares these decoded settings with
-the current config on the locked main thread, before source resolution or any
-native change/save. A mismatch returns `stale_config` and the authoritative
-snapshot. Cancel the old intent and let the user make a new explicit selection;
-never automatically refresh the precondition and retry. Malformed or null
-`expected_config` returns `invalid_payload`. Absence remains compatible with
-older clients, which retain only the emergency-sequence guard. This compares
-config values, not JSON formatting, and does not replace live source identity
-validation or detect a change that was subsequently reverted to equal values.
+Новые клиенты также передают полный `snapshot.config` как `expected_config`.
+После проверки аварийного счётчика движок сравнивает декодированные настройки
+с текущей конфигурацией в закреплённом главном потоке — до определения
+источника, нативных изменений или сохранения. Несовпадение возвращает
+`stale_config` и достоверный снимок состояния. Отмените прежнее действие
+и дайте пользователю сделать новый явный выбор; никогда не обновляйте
+предусловие автоматически ради повторного запроса. Некорректный или null
+`expected_config` возвращает `invalid_payload`. Отсутствие поля сохраняет
+совместимость со старыми клиентами, у которых остаётся только защита аварийным
+счётчиком. Сравниваются значения конфигурации, а не форматирование JSON.
+Это не заменяет проверку текущей идентичности источника и не обнаруживает
+изменение, после которого значения были возвращены к прежним.
 
-The host drains stdout throughout the child lifetime. For quit/update, wait
-for the clean quit response **and actual exit 0**; EOF alone proves neither
-cleanup nor restoration. Abort update on failure. Do not use process-tree kill
-or inherited kill-on-close jobs: the display watchdog must remain alive.
-Host crash closes stdin and requests normal engine cleanup. Forced engine
-termination still uses the documented next-launch window recovery fallback.
+Оболочка читает stdout на протяжении всей жизни дочернего процесса.
+При завершении или обновлении дождитесь ответа об успешном завершении
+**и фактического выхода с кодом 0**; один EOF не доказывает ни освобождение
+ресурсов, ни восстановление. При ошибке отмените обновление. Не завершайте
+дерево процессов и не используйте наследуемые задания Windows с kill-on-close:
+процесс восстановления дисплея должен остаться жив. Сбой оболочки закрывает
+stdin и запрашивает штатное завершение движка. При принудительном завершении
+движка по-прежнему используется документированный резервный механизм
+восстановления окна при следующем запуске.

@@ -55,6 +55,7 @@ PY_CLEAN
 mkdir -p build/desktop-licenses/native
 cp "$native"/licenses/* build/desktop-licenses/native/
 (cd desktop && npm ci --ignore-scripts --no-audit --no-fund)
+cargo fetch --manifest-path desktop/src-tauri/Cargo.toml --locked --target x86_64-pc-windows-msvc
 python3 desktop/scripts/licenses.py --output build/desktop-licenses/rust
 python3 desktop/scripts/npm-licenses.py --output build/desktop-licenses/npm
 python3 scripts/stage-installer.py --licenses build/desktop-licenses

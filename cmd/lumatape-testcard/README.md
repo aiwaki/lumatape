@@ -1,8 +1,10 @@
-# LumaTape capture test card
+# Тестовая сцена захвата LumaTape
 
-`lumatape-testcard` opens a real, interactive, independent Win32 window titled **LumaTape test card**. It is a manual test source for LumaTape; passing this test does not establish compatibility with a real game or anti-cheat.
+Русский · [English](README.en.md)
 
-Build on Windows, or cross-compile with no C toolchain:
+`lumatape-testcard` открывает настоящее независимое интерактивное Win32-окно **LumaTape test card**. Это источник для ручной проверки LumaTape; успешный тест не подтверждает совместимость с настоящей игрой или античитом.
+
+Сборка в Windows или кросс-сборка без C-инструментария:
 
 ```powershell
 go build -o lumatape-testcard.exe ./cmd/lumatape-testcard
@@ -15,20 +17,20 @@ go build -o lumatape-testcard.exe ./cmd/lumatape-testcard
 GOOS=windows GOARCH=amd64 go build -o lumatape-testcard.exe ./cmd/lumatape-testcard
 ```
 
-The default client is **960×720 physical pixels (4:3)**, with a resizable border. The 1280×1024 example is deliberately **5:4**. The source requires Windows 10 1703+ for DPI v2; the full LumaTape capture application has its own higher Windows requirement. It uses standard Win32/GDI only, with cached fonts and a backbuffer recreated on resize. A `WM_TIMER` message requests updates approximately every 16 ms; object motion uses elapsed monotonic time, not frame count. This is not a frame-rate or latency benchmark.
+По умолчанию клиентская область занимает **960×720 физических пикселей (4:3)**; окно имеет рамку и меняет размер. Пример 1280×1024 намеренно имеет пропорции **5:4**. Для DPI v2 источнику нужна Windows 10 1703+; у полного приложения захвата LumaTape собственное, более высокое требование к Windows. Используются только стандартные Win32/GDI, кешируемые шрифты и задний буфер, пересоздаваемый при resize. Сообщение `WM_TIMER` запрашивает обновление примерно каждые 16 мс; движение объектов зависит от прошедшего монотонного времени, а не числа кадров. Это не инструмент измерения FPS или задержки.
 
-`--color-field` adds static colored midtones for inspecting VHS noise and chroma. The normal live timer and moving square remain available; compare the static regions when evaluating separately captured images. The root `Try-VHS.cmd` launcher selects this view and the stronger VHS Tape preset in explicit Full CPU compatibility, using a separate demo profile.
+`--color-field` добавляет неподвижные цветные полутона для оценки VHS-шума и цветности. Обычный таймер и движущийся квадрат продолжают работать; при сравнении отдельно полученных изображений оценивайте неподвижные области. Корневой `Try-VHS.cmd` выбирает эту сцену и более выраженный пресет VHS Tape в явном режиме совместимости Full CPU с отдельным демо-профилем.
 
-Manual workflow:
+Порядок ручной проверки:
 
-1. Start this source, then select its exact window title in LumaTape. Keep `input_mode` set to `mouse-exact`; source and output client rectangles must coincide. Capture should exclude the cursor.
-2. At intensity **0**, compare the source with full-mode output. Colors, circle, client edges, grid and button location should match. There should be no dimmed double image, captured title bar, recursion or duplicate pointer.
-3. Click **CLICK HERE** at its center and close to every edge. The visible count must increase only inside the visible button. Repeat after dragging to a monitor with negative coordinates, changing DPI, and resizing. A clickable transparent overlay alone does not prove coordinate alignment.
-4. Try all four presets. VHS Tape should make noise and color bleed more noticeable than VHS Light, especially with `--color-field`. Return focus to the source after choosing a preset in the tray; source-bound effects hide while the tray has focus. Inspect 10/12-pixel text, bright color bars, one-pixel stripes and the moving orange square for blur, clipping, moire, flicker and excessive darkening. The circle must remain circular in preserve/fit mode with square pixels. Explicit DAR changes intentionally reinterpret the source.
-5. Alt+Tab, minimize, restore, close the source, then restart it. Verify source-bound effects hide as intended and emergency disable works. Repeat on a real windowed/borderless game afterward.
+1. Запустите сцену и выберите точный заголовок её окна в LumaTape. Оставьте `input_mode` равным `mouse-exact`: клиентские прямоугольники источника и вывода должны совпадать. Курсор не должен попадать в захват.
+2. При интенсивности **0** сравните источник с выводом Full. Цвета, круг, клиентские границы, сетка и положение кнопки должны совпадать. Не должно быть затемнённого двойного изображения, захваченного заголовка, рекурсии или двойного указателя.
+3. Нажмите **CLICK HERE** в центре и около каждого края. Видимый счётчик должен увеличиваться только внутри видимой кнопки. Повторите после перемещения на монитор с отрицательными координатами, смены DPI и resize. Сам по себе прозрачный кликабельный оверлей не доказывает совпадение координат.
+4. Проверьте все пять встроенных пресетов. Шум и растекание цветности VHS Tape должны быть заметнее, чем у VHS Light, особенно с `--color-field`. После выбора пресета в трее верните фокус источнику: эффект выбранного окна скрывается, пока фокус у трея. Проверьте текст 10/12 пикселей, яркие цветные полосы, однопиксельные линии и движущийся оранжевый квадрат на размытие, обрезание, муар, мерцание и избыточное затемнение. В preserve/fit с квадратными пикселями круг должен оставаться круглым. Явное изменение DAR намеренно меняет трактовку пропорций источника.
+5. Выполните Alt+Tab, сверните, восстановите, закройте источник и запустите его снова. Проверьте предусмотренное скрытие эффекта источника и аварийное отключение. Затем повторите на настоящей игре в оконном/borderless режиме.
 
-Do not label crop/stretch or a shifted/scaled presentation mouse-compatible unless input mapping is implemented and verified. This source uses the normal system cursor without painting a second cursor and makes no changes to system display modes.
+Не называйте crop/stretch или смещённый/масштабированный вывод совместимым с мышью, пока преобразование ввода не реализовано и не проверено. Сцена использует обычный системный курсор, не рисует второй и не меняет системные видеорежимы.
 
-Implementation references: [DPI v2 initialization](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setprocessdpiawarenesscontext), [physical client sizing](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-adjustwindowrectexfordpi), [painting lifecycle](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-beginpaint), [WM_TIMER scheduling](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-settimer).
+Справочники реализации: [инициализация DPI v2](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-setprocessdpiawarenesscontext), [физический размер клиентской области](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-adjustwindowrectexfordpi), [цикл отрисовки](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-beginpaint), [планирование WM_TIMER](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-settimer).
 
-Windows rendering and interaction must be checked on Windows. Cross-compilation alone does not verify runtime behavior.
+Отрисовку и взаимодействие Windows нужно проверять в Windows. Кросс-сборка сама по себе не подтверждает поведение при запуске.

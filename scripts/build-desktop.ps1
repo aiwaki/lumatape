@@ -31,6 +31,8 @@ try {
   if(Test-Path $licenses){Remove-Item $licenses -Recurse -Force}
   New-Item -ItemType Directory -Force $licenses|Out-Null
   Copy-Item "$source/licenses" "$licenses/native" -Recurse
+  cargo fetch --manifest-path desktop/src-tauri/Cargo.toml --locked --target x86_64-pc-windows-msvc
+  if($LASTEXITCODE -ne 0){throw 'Locked Rust dependency download failed'}
   python desktop/scripts/licenses.py --output "$licenses/rust"
   if($LASTEXITCODE -ne 0){throw 'License collection failed'}
   python desktop/scripts/npm-licenses.py --output "$licenses/npm"

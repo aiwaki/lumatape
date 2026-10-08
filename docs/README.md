@@ -1,12 +1,15 @@
 # Документация LumaTape
 
+**Русский** · [English](README.en.md)
+
 Установка и первые шаги: [Русский](../README.md) · [English](../README.en.md).
 Основной продукт — Windows-приложение с нативным треем Tauri. Сохранённые
 React-прототипы и отдельный Go/Win32-интерфейс не являются его текущим UI.
 
 | Задача | Документ |
 |---|---|
-| Написать или импортировать эффект | [LumaTape Shader v1](SHADER_SPEC.md), [примеры](../examples/shaders) |
+| Добавить эффект или создать его с AI | [Русский](shaders/README.md), [English](shaders/README.en.md) |
+| Написать шейдер по контракту v1 | [Техническая спецификация](SHADER_SPEC.md), [примеры](../examples/shaders) |
 | Собрать приложение с треем | [Desktop host](../desktop/src-tauri/README.md) |
 | Подготовить подписанное обновление | [Обновления](UPDATES.md) |
 | Разобраться в захвате и рендере | [Архитектура](ARCHITECTURE.md), [capture DLL](../native/capture/README.md) |

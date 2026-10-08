@@ -97,7 +97,7 @@ func pack(o options) error {
 		}
 		provenance = append(provenance, r)
 	}
-	for _, name := range []string{"README.md", "START-HERE.txt", "LICENSE", "assets/lumatape.svg", "assets/lumatape.ico", "third_party/README.md", "third_party/Go-LICENSE.txt", "third_party/cppwinrt-LICENSE.txt", "third_party/MSVC-STL-LICENSE.txt"} {
+	for _, name := range []string{"README.md", "README.en.md", "START-HERE.txt", "START-HERE.en.txt", "LICENSE", "assets/lumatape.svg", "assets/lumatape.ico", "third_party/README.md", "third_party/README.en.md", "third_party/Go-LICENSE.txt", "third_party/cppwinrt-LICENSE.txt", "third_party/MSVC-STL-LICENSE.txt"} {
 		if err = copyFile(filepath.Join(o.root, filepath.FromSlash(name)), filepath.Join(stage, filepath.FromSlash(name))); err != nil {
 			return err
 		}
@@ -181,7 +181,7 @@ func copyFile(from, to string) error {
 	return errors.Join(e, out.Close())
 }
 
-var publicDocs = []string{"README.md", "WINDOWS_VALIDATION.md", "PARALLELS_SMOKE.md", "ARCHITECTURE.md", "PRIOR_ART_AUDIT.md", "SHADER_SPEC.md", "UPDATES.md"}
+var publicDocs = []string{"README.md", "README.en.md", "shaders/README.md", "shaders/README.en.md", "WINDOWS_VALIDATION.md", "PARALLELS_SMOKE.md", "ARCHITECTURE.md", "PRIOR_ART_AUDIT.md", "SHADER_SPEC.md", "UPDATES.md"}
 
 func copyPublicDocs(root, stage string) error {
 	for _, name := range publicDocs {

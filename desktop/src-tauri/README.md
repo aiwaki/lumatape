@@ -1,265 +1,268 @@
-# LumaTape desktop host
+# Оболочка LumaTape для Windows
 
-Windows Tauri 2 host, candidate version 0.3.1. **The application surface is a
-native tray menu only.** The host creates no application window or WebView at
-startup. Rendering, capture, hotkeys and geometry recovery remain in Go/Win32;
-menu ownership, file selection, clipboard operations and updates belong to Rust.
+**Русский** · [English](README.en.md)
 
-`tauri.conf.json` has `app.windows: []`, embeds the minimal `../tray-assets`
-directory, and has no frontend build/dev command. WebView2 is not required for
-this windowless application; `bundle.windows.webviewInstallMode` is `skip`.
-React/Vite, `desktop/ui` and former panel source remain in the
-repository as history; separate design experiments are local backups. `dev:ui`, `build:ui` and browser `?demo=1`
-refer to those retained prototypes, not to the shipped tray. Their tests do not
-qualify the native menu. The retained CSP and old window capability files do not
-create a WebView or expose a frontend command handler.
+Оболочка на Tauri 2, предварительная версия 0.3.1. **Интерфейс приложения — только
+нативное меню трея.** При запуске не создаются окно приложения или WebView.
+Рендер, захват, горячие клавиши и восстановление геометрии остаются в Go/Win32;
+меню, выбор файлов, буфер обмена и обновления — в Rust.
 
-## Build and resources
+В `tauri.conf.json` заданы `app.windows: []` и минимальный каталог `../tray-assets`;
+команд сборки или запуска frontend нет. Для приложения без окна WebView2 не нужен;
+`bundle.windows.webviewInstallMode` равен `skip`. React/Vite, `desktop/ui` и код
+прежней панели сохранены в репозитории как история; отдельные дизайн-эксперименты
+остались в локальных резервных копиях. `dev:ui`, `build:ui` и браузерный `?demo=1`
+относятся к этим прототипам, а не к поставляемому трею. Их тесты не проверяют
+нативное меню. Сохранённые CSP и старые файлы разрешений окна не создают WebView
+и не открывают обработчик frontend-команд.
 
-From `desktop/`, install the locked Tauri CLI dependencies with
-`npm ci --ignore-scripts --no-audit --no-fund`, then use `npm run dev` on Windows
-after staging the engine resources below. No Vite server or React build is
-needed. Node/npm are build tools only; players do not need Node, Rust or Go.
+## Сборка и ресурсы
 
-Build with the committed Cargo.lock and `--locked`. The lock contains Tauri
-runtime 2.11.3, macros/build 2.6.3, utils 2.9.3 and tray-icon 0.24.2. Keep this
-coherent set: an earlier unconstrained lock selected an incompatible runtime
-2.12.1 during Windows compilation.
+В `desktop/` установите закреплённые зависимости Tauri CLI командой
+`npm ci --ignore-scripts --no-audit --no-fund`, затем запустите `npm run dev`
+в Windows после подготовки ресурсов движка ниже. Vite-сервер и сборка React
+не нужны. Node/npm используются только при сборке; игрокам Node, Rust и Go не нужны.
 
-The parent build stages these files under `resources/engine/` before invoking
-Tauri. Paths are resolved through Tauri's resource directory, including Unicode
-installation paths:
+Собирайте с сохранённым Cargo.lock и флагом `--locked`. В lock закреплены Tauri
+runtime 2.11.3, macros/build 2.6.3, utils 2.9.3 и tray-icon 0.24.2. Сохраняйте этот
+согласованный набор: прежде неограниченное разрешение версий выбирало runtime
+2.12.1, несовместимый при сборке для Windows.
 
-- `lumatape-engine.exe` — Go `cmd/lumatape` with its stdio controller.
+Перед запуском Tauri основной скрипт сборки размещает в `resources/engine/`:
+
+- `lumatape-engine.exe` — Go `cmd/lumatape` с контроллером stdio.
 - `lumatape-watchdog.exe`, `lumatape-testcard.exe`.
 - `glfw3.dll`, `lumatape_capture.dll`.
 
-`lumatape.exe` is the Rust host. It launches only the fixed engine executable
-with inherited anonymous pipes, the host PID, `--headless-settings`, and no
-console. There is no localhost HTTP service. The engine directory is the child
-working directory. Required files are checked before launch; provenance and
-hashes belong in the package manifest. Profiles and logs remain in the normal
-user-data directories, not beside the installed executable.
+Пути разрешаются через каталог ресурсов Tauri, в том числе при установке в путь
+с Unicode. `lumatape.exe` — оболочка Rust. Она запускает только фиксированный
+исполняемый файл движка с наследуемыми анонимными каналами, PID оболочки,
+`--headless-settings` и без консоли. HTTP-сервера localhost нет. Рабочий каталог
+дочернего процесса — каталог движка. Наличие нужных файлов проверяется до запуска;
+происхождение и хеши записываются в манифест пакета. Профили и журналы остаются
+в пользовательских каталогах данных, а не рядом с установленным EXE.
 
-From the repository root:
+Из корня репозитория:
 
 ```sh
 scripts/build-desktop.sh /absolute/current-native-install 0.3.1
 ```
 
-Or on Windows:
+Или в Windows:
 
 ```powershell
 .\scripts\build-desktop.ps1 -Version 0.3.1
 ```
 
-The scripts rebuild the Go binaries/resources and Rust host, stage an allowlisted
-package, and produce `dist/lumatape-0.3.1-windows-x64.zip`, checksums, version
-metadata and licenses. They do not invoke `build:ui`. An existing ZIP with the
-same version number can still be an older panel build; match the concrete
-artifact and SHA256 against the release checksums and package manifest.
+Скрипты пересобирают Go-программы, ресурсы и Rust-оболочку, собирают пакет по явному
+списку файлов и создают `dist/lumatape-0.3.1-windows-x64.zip`, контрольные суммы,
+метаданные версии и лицензии. `build:ui` не вызывается. ZIP с тем же номером версии
+может оказаться старой сборкой с панелью; сверяйте конкретный файл и SHA256
+с контрольными суммами релиза и манифестом пакета.
 
-Run `npm run test:host` from `desktop/` for Rust tests. The pure menu model is in
-[`src/tray_model.rs`](src/tray_model.rs), native menu lifetime/dispatch in
-[`src/tray.rs`](src/tray.rs), and platform dialogs/clipboard in
-[`src/native_dialog.rs`](src/native_dialog.rs). Compilation and portable tests
-are separate from Windows menu qualification. No new runtime result is implied
-by these instructions.
+Для тестов Rust запустите `npm run test:host` из `desktop/`. Чистая модель меню —
+[`src/tray_model.rs`](https://github.com/aiwaki/lumatape/blob/main/desktop/src-tauri/src/tray_model.rs),
+время жизни и обработка событий нативного меню —
+[`src/tray.rs`](https://github.com/aiwaki/lumatape/blob/main/desktop/src-tauri/src/tray.rs),
+системные диалоги и буфер обмена —
+[`src/native_dialog.rs`](https://github.com/aiwaki/lumatape/blob/main/desktop/src-tauri/src/native_dialog.rs).
+Компиляция и переносимые тесты не заменяют проверку меню в Windows. Эта инструкция
+сама по себе не подтверждает новых результатов выполнения.
 
-## Native menu and capture capability
+## Нативное меню и возможности захвата
 
-Left and right click open the same Windows menu. It contains the actual status,
-one **Включить / Выключить** action, **Игра**, **Эффект**,
-**Добавить эффект из файла…**, **Настройки**,
-**Сервис**, and **Выход**. **Подтвердить видеорежим** appears only while a display
-change awaits confirmation. There is no panel, close-to-
-tray window flow, embedded preview, intensity slider, parameter editor or second
-Stop action. The OS renders menu appearance.
+Левая и правая кнопки мыши открывают одно и то же меню Windows. В нём показаны
+фактическое состояние, одно действие **Включить / Выключить**, **Игра**, **Эффект**,
+**Добавить эффект из файла…**, **Настройки**, **Сервис** и **Выход**.
+**Подтвердить видеорежим** появляется только во время ожидания подтверждения.
+Панели, окна со сворачиванием в трей, встроенного предпросмотра, ползунка
+интенсивности, редактора параметров и второй кнопки «Стоп» нет. Вид меню задаёт ОС.
 
-**Игра** lists concrete windows. IDs encode HWND, PID and process creation
-identity instead of titles or positions. Duplicate titles are disambiguated;
-menu labels escape ampersands and control characters. The shell never silently
-replaces a closed source with another same-title window. Full-monitor capture
-remains unsupported. Whole-monitor selection for Lightweight is available only
-in the separate legacy/CLI application; the new tray selects game windows.
+**Игра** перечисляет конкретные окна. Идентификаторы содержат HWND, PID и время
+создания процесса вместо названий или позиций. Совпадающие названия различаются;
+амперсанды и управляющие символы экранируются. Закрытый источник не заменяется
+молча другим окном с тем же названием. Full-захват всего монитора не поддерживается.
+Выбор монитора для Lightweight есть только в отдельном legacy/CLI-приложении;
+новый трей выбирает игровые окна.
 
-**Настройки** provides screen shape, 4:3/display choice, image distortion, scale, source DAR,
-backend and hotkey profiles. Selections apply directly rather than accumulating
-a form draft. Invalid combinations are disabled. System display changes require
-a native warning first, then explicit **Подтвердить видеорежим** within the
-engine/watchdog's 15-second timeout; otherwise the previous mode is restored.
-The tray no longer offers a mask or automatic game-window resize. Legacy active
-formats are shown read-only and can be restored; choose 4:3 inside the game first.
+**Настройки** содержат форму экрана, 4:3/видеорежим, искажения изображения, масштаб,
+исходный DAR, обработку и профили клавиш. Выбор применяется сразу, без накопления
+черновика формы. Недопустимые сочетания недоступны. Системная смена видеорежима
+сначала требует подтверждения в нативном предупреждении, затем явного
+**Подтвердить видеорежим** в пределах 15 секунд движка/watchdog; иначе возвращается
+прежний режим. В трее больше нет маски и автоматического изменения окна игры.
+Активные форматы старых профилей видны только для чтения и допускают восстановление;
+в первую очередь выбирайте 4:3 в самой игре.
 
-For a curved screen with a mouse, choose **Settings → Image distortion →
-Accurate clicks** and **Settings → Screen shape → Curved CRT**, with Full Auto,
-GPU or compatible CPU processing. The built-in screen shape projects the system
-cursor onto the curved image while leaving Windows cursor coordinates, mouse
-events, Raw Input and capture unchanged. Flat and rounded shapes keep their
-original pixel positions. Crop/stretch and custom DAR require **Allow arbitrary distortion**;
-keyboard and mouse work in both modes, but arbitrary distortion can misalign clicks; a custom `coordinates: "warp"` shader has no cursor projection.
-This is not general input remapping.
+Для выпуклого экрана с мышью выберите **Настройки → Искажения изображения →
+Точные клики** и **Настройки → Форма экрана → Выпуклый CRT**, используя Full Auto,
+GPU или совместимую обработку CPU. Встроенная форма проецирует системный курсор
+на искривлённое изображение, не меняя координаты курсора Windows, события мыши,
+Raw Input и захват. Плоская и скруглённая формы сохраняют положения пикселей.
+Crop/Stretch и нестандартный DAR требуют **Разрешить произвольные искажения**.
+Клавиатура и мышь работают в обоих вариантах, но произвольные искажения могут
+нарушить совпадение кликов; для своего шейдера с `coordinates: "warp"` проекции
+курсора нет. Это не универсальное переназначение ввода.
 
-Projection does not reproduce animated system-cursor timing and does not support
-XOR-inverting cursors. Software cursors drawn by a game remain in the captured
-image. Real games, physical host input and Parallels host-cursor visibility need
-separate qualification; see the
-[Windows protocol](../../docs/WINDOWS_VALIDATION.md).
+Проекция не воспроизводит тайминг анимированного системного курсора и не поддерживает
+XOR-инвертирующие курсоры. Курсор, рисуемый игрой, остаётся в захваченном изображении.
+Реальные игры, физический ввод и видимость курсора хоста Parallels требуют
+отдельной проверки: см. [протокол Windows](../../docs/WINDOWS_VALIDATION.md).
 
-The model reads the authoritative config without migrating it. Explicit effect
-selection or Power-on normalizes intensity to 1. Selecting a full effect for a
-window from Lightweight selects Full Auto; source, shape, format, hotkeys and
-filter enabled state otherwise survive effect changes. The existing saved
-shader parameter values survive reselecting the same immutable asset.
+Модель читает фактическую конфигурацию без миграции. Явный выбор эффекта или
+включение нормализует интенсивность до 1. Выбор полноценного эффекта для окна
+из Lightweight переключает обработку в Full Auto; в остальном источник, форма,
+формат, клавиши и включённость сохраняются. Повторный выбор того же неизменяемого
+шейдера сохраняет пользовательские значения его параметров.
 
-New profiles use Auto and Ctrl+Shift+9 / Ctrl+Shift+0. Existing manual modes and
-bindings are retained. **Настройки → Горячие клавиши** offers that pair and
-Ctrl+Alt+F9 / Ctrl+Alt+F10; an existing custom pair is shown and retained until
-another profile is explicitly selected. There is no custom key recorder in the
-tray. Go registers the replacement pair transactionally. **Сервис → Проверить
-горячие клавиши…** reports registration separately from commands actually
-received while the native test message is open. Those commands act for real.
+Новые профили используют Auto и Ctrl+Shift+9 / Ctrl+Shift+0. Прежние ручные режимы
+и привязки сохраняются. **Настройки → Горячие клавиши** предлагает эту пару и
+Ctrl+Alt+F9 / Ctrl+Alt+F10; существующая своя пара показывается и сохраняется
+до явного выбора другого профиля. Редактора произвольных сочетаний в трее нет.
+Go регистрирует новую пару транзакционно. **Сервис → Проверить горячие клавиши…**
+различает регистрацию и фактическое получение команд, пока открыт нативный
+проверочный диалог. Эти команды выполняются по-настоящему.
 
-Auto tries GPU first and permits CPU only for classified interop failures.
-Missing prerequisites are detected in the current GL context; present
-prerequisites remain unknown until a successful capture Open. Generic source,
-device or HDR failures are not fallback reasons. Actual backend and requested
-transfer are distinct. CPU submission is capped at 30 FPS; this is not a promise
-of sustained frame rate or game latency.
+Auto сначала пробует GPU и допускает CPU только для распознанных ошибок interop.
+Отсутствующие возможности выявляются в текущем GL-контексте; наличие предпосылок
+ещё не подтверждает работоспособность до успешного Open захвата. Общие ошибки
+источника, устройства и HDR не служат основанием для fallback. Фактический backend
+и запрошенный способ переноса различаются. CPU submission ограничен 30 FPS;
+это не обещание стабильной частоты кадров или задержки игры.
 
-### Import and the standalone test card
+### Импорт и отдельная тестовая сцена
 
-**Добавить эффект из файла…** opens the Windows file dialog for `.lumatape.glsl`
-or `.glsl`, using its own STA thread. File reads are limited to 64 KiB and must
-be UTF-8. `shader_import` parses the versioned contract, compiles on the real GL
-thread and saves only success; that RPC alone never activates the program.
-`shaders` and `shader_source` read the local library. Selection compiles before
-capture, hotkey or geometry mutations and keeps the last working program on
-failure. See [LumaTape Shader v1](../../docs/SHADER_SPEC.md); GLSL is not a GPU
-sandbox.
+**Добавить эффект из файла…** открывает диалог Windows для `.lumatape.glsl` или
+`.glsl` в отдельном STA-потоке. Файл должен быть UTF-8 и не больше 64 KiB.
+`shader_import` разбирает версионный контракт, компилирует в реальном GL-потоке
+и сохраняет только успешный результат; этот RPC сам не активирует программу.
+`shaders` и `shader_source` читают локальную библиотеку. Выбор компилирует шейдер
+до изменений захвата, клавиш и геометрии, сохраняя последнюю рабочую программу
+при ошибке. См. [LumaTape Shader v1](../../docs/SHADER_SPEC.md); GLSL не является
+изолированной песочницей GPU.
 
-The host may select a successfully imported shader when a source is already
-selected and controls are compatible, preserving enabled state. Import before
-game selection still saves the asset and explains the next step. A `warp`
-shader is saved but remains unselected until **Настройки → Управление →
-Клавиатура / геймпад** is explicitly chosen. The host does not silently switch
-input modes. An AI prompt example lives in the root README, not in the menu. The user
-sends it to an AI and saves the returned file. There is no code-paste editor or
-automatic AI request.
+После успешного импорта оболочка может выбрать шейдер, если уже выбран источник
+и настройки совместимы, сохраняя включённость. Импорт до выбора игры сохраняет
+файл и объясняет следующий шаг. Шейдер `warp` сохраняется, но не выбирается,
+пока явно не задано **Настройки → Искажения изображения → Разрешить произвольные
+искажения**. Оболочка не меняет этот режим молча. Пример запроса к AI находится
+в [инструкции по шейдерам](../../docs/shaders/README.md), а не в меню. Пользователь
+сам отправляет запрос и сохраняет полученный файл. Редактора кода и автоматических
+запросов к AI нет.
 
-**Сервис → Тестовая сцена** launches the fixed bundled color-field test card as
-an independent window. The user selects it under **Игра** and operates the
-normal effect. The host owns only that child, reuses its window, and closes it
-with WM_CLOSE plus a bounded exit wait before host exit or update installation.
-It does not kill an unrelated test card or accept arbitrary process arguments.
-The engine's preview RPC remains for compatibility/developer checks; the tray
-has no embedded A/B renderer.
+**Сервис → Тестовая сцена** запускает поставляемую тестовую цветовую сцену
+отдельным окном. Пользователь выбирает её в **Игра** и применяет обычный эффект.
+Оболочка управляет только своим дочерним процессом, повторно использует его окно
+и перед выходом или установкой обновления закрывает через WM_CLOSE с ограниченным
+ожиданием. Она не завершает чужую тестовую сцену и не принимает произвольные
+аргументы процесса. RPC предпросмотра движка сохранён для совместимости и проверок
+разработчика; встроенного A/B-рендера в трее нет.
 
-## Lifetime, cancellation and protocol
+## Время жизни, отмена и протокол
 
-Single-instance handling runs before engine creation. A second launch normally
-shows a native message directing the user to the existing tray. Tauri owns the
-one visible icon and native menu; the controlled Go engine retains a hidden
-Win32 controller for hotkeys and recovery without registering another icon or
-opening its legacy settings. Standalone Go CLI use retains the original Win32
-interface.
+Проверка единственного экземпляра выполняется до создания движка. Повторный запуск
+обычно показывает нативное сообщение, направляющее к существующему трею. Tauri
+владеет единственной видимой иконкой и меню; управляемый Go-движок сохраняет скрытый
+Win32-контроллер клавиш и восстановления без второй иконки и прежних настроек.
+Отдельный запуск Go CLI сохраняет исходный Win32-интерфейс.
 
-The host polls the authoritative snapshot, source catalog and shader catalog,
-with one refresh in flight and a three-second timeout per read. Native menu
-updates run on the main thread. Config-changing actions are serialized; Power
-remains available to cancel an in-flight action. Off always invokes `emergency`,
-including format-only, pending confirmation, unsaved or recovery states. Unknown
-state also offers Off rather than attempting an implicit start.
+Оболочка опрашивает фактический snapshot, список источников и библиотеку шейдеров:
+один refresh одновременно, до трёх секунд на чтение. Меню обновляется в главном
+потоке. Изменения конфигурации сериализованы; включение/выключение остаётся доступно
+для отмены текущей операции. Выключение всегда вызывает `emergency`, в том числе
+при одном формате, ожидающем подтверждении, несохранённых изменениях или
+восстановлении. При неизвестном состоянии предлагается выключение, а не неявный запуск.
 
-Each apply clones a fresh config and includes `expected_emergency_sequence` plus
-`expected_config`. Go checks both before replacing state. The config comparison
-is optional only for legacy clients; the new tray always sends it. Rejected
-changes are not automatically retried against newer state. The host captures
-intent before native dialogs and observes advancing engine emergency events,
-including hotkeys, to cancel pending follow-up work. Responses predating that
-emergency floor cannot restore stale menu state. If a refresh fails, stale
-editable state is discarded and the emergency action remains reachable. Runtime
-reasons and operation failures are available through **Сервис → Последняя
-ошибка…**.
+Каждое применение клонирует свежую конфигурацию и отправляет
+`expected_emergency_sequence` вместе с `expected_config`. Go проверяет оба значения
+до замены состояния. Сравнение конфигурации необязательно только для старых клиентов;
+новый трей всегда его отправляет. Отклонённые изменения не повторяются автоматически
+поверх более нового состояния. Оболочка фиксирует намерение до нативных диалогов
+и наблюдает новые emergency-события движка, включая горячие клавиши, чтобы отменить
+ожидающие продолжения. Старые ответы не могут вернуть состояние меню до emergency.
+При ошибке refresh устаревшее редактируемое состояние отбрасывается; аварийное
+выключение остаётся доступно. Причины состояния и ошибки операций доступны через
+**Сервис → Последняя ошибка…**.
 
-On Windows, icon reachability is checked via `Shell_NotifyIconGetRect`.
-tray-icon handles Explorer's TaskbarCreated notification for the same native
-icon. A missing icon triggers emergency restoration; persistent loss or initial
-creation failure uses native messages and a safe-shutdown/retry flow, not a
-fallback WebView. This behavior still needs real Explorer-restart qualification.
+В Windows доступность иконки проверяет `Shell_NotifyIconGetRect`. tray-icon
+обрабатывает уведомление Explorer TaskbarCreated для той же нативной иконки.
+Пропажа иконки запускает аварийное восстановление; длительная недоступность или
+ошибка создания используют нативные сообщения и безопасное завершение/повтор,
+без запасного WebView. Этот сценарий ещё требует проверки перезапуска Explorer.
 
-Explicit Quit waits for the engine cleanup response and actual process exit.
-If the engine has already terminated and cleanup failed, explicit Quit closes
-the host with exit code 1; an unknown or still-running process continues to block
-exit. Failed restoration is reported and can be retried. Update installation
-keeps the stricter successful-cleanup requirement. The stdout reader drains the
-final cleanup response before process-exit handling finalizes the result. Host
-failure closes stdin, which requests Go cleanup; forceful OS/session shutdown
-requires separate runtime testing.
+Явное завершение ждёт ответа об очистке движка и фактического выхода процесса.
+Если движок уже завершён, а очистка не удалась, оболочка закрывается с кодом 1;
+неизвестный или работающий процесс продолжает блокировать выход. Ошибка восстановления
+показывается и допускает повтор. Установка обновления требует успешной очистки.
+Читатель stdout забирает последний ответ очистки до окончательной обработки выхода.
+Сбой оболочки закрывает stdin и запрашивает очистку Go; принудительное завершение
+ОС/сеанса требует отдельной проверки выполнения.
 
-Protocol v1 is one JSON object per line. Requests are allowlisted and limited
-to 120 KiB, leaving room under Go's 128 KiB envelope limit. There are at most
-16 ordinary pending requests, plus reserved emergency/quit capacity; responses
-are limited to 2 MiB. Normal mutation requests time out after 12 seconds. A
-timeout means the outcome must be refreshed, not that the mutation was undone.
-Errors retain the complete response, including an authoritative `result` after
-an applied-but-unsaved change. Engine stderr is drained separately from stdout.
-Diagnostics remain in the Go rotating log; clipboard diagnostics do not upload
-anything.
+Протокол v1 — один JSON-объект на строку. Запросы разрешены явным списком и
+ограничены 120 KiB, оставляя запас до лимита Go 128 KiB. Одновременно допускаются
+16 обычных запросов плюс зарезервированная ёмкость для emergency/quit; ответы
+ограничены 2 MiB. Обычные изменения имеют таймаут 12 секунд. Таймаут требует
+обновить состояние и не означает отмену изменения. Ошибки сохраняют полный ответ,
+включая фактический `result` после применённого, но несохранённого изменения.
+Stderr движка читается отдельно. Диагностика остаётся в ротируемом журнале Go;
+копирование в буфер обмена ничего не отправляет.
 
-## Updates and license packaging
+## Обновления и лицензии в пакете
 
-The shipped update configuration is **unconfigured**: check operations make no
-network request. No feed, signing key or credentials from another product are
-used. There is no WebView2 bootstrap download; its installer mode is `skip`.
+Обычные сборки разработчика **не настроены** на обновления и не выполняют таких
+запросов. Релизные сборки содержат endpoint и публичный ключ LumaTape; feed,
+ключ подписи и учётные данные другого продукта не используются. Автоматической
+загрузки WebView2 нет: режим установщика — `skip`.
 
-A release operator must supply a new LumaTape public key and HTTPS feed at build
-time using `LUMATAPE_UPDATE_PUBLIC_KEY` and `LUMATAPE_UPDATE_ENDPOINT`, produce
-signed Tauri updater artifacts, and qualify the installed-to-updated Windows
-scenario. `createUpdaterArtifacts` is deliberately false in the unconfigured
-build. Signing secrets never belong in this repository or packaged resources.
+При подготовке релиза задаются отдельный публичный ключ LumaTape и HTTPS-feed
+через `LUMATAPE_UPDATE_PUBLIC_KEY` и `LUMATAPE_UPDATE_ENDPOINT`, создаются
+подписанные пакеты Tauri и проверяется сценарий обновления установленного приложения
+в Windows. В ненастроенной сборке `createUpdaterArtifacts` намеренно равен false.
+Секреты подписи не должны попадать в репозиторий или ресурсы приложения.
 
-The configured tray checks once 20 seconds after startup, without a popup, and
-on demand. Only a user-confirmed current-user NSIS installation can install an
-update; portable/copy identity is rejected before download or engine shutdown.
-Metadata is bounded at64KiB and the signed installer at256MiB. Version, target,
-immutable URL, full minisign signature and PE version are checked before shutdown.
-Progress appears in the native menu. Checked Windows process creation launches
-NSIS only after engine cleanup; successful launch authorizes host exit, while a
-failure retains the tray with a restart instruction. This replaces the unchecked
-Windows launch boundary in the official updater; it does not claim automatic
-rollback or successful installation merely from process launch.
+Настроенный трей проверяет обновления один раз через 20 секунд после запуска
+без всплывающего окна, а также по команде. Установить обновление может только
+NSIS-установка для текущего пользователя после его подтверждения; переносная
+или скопированная сборка отклоняется до загрузки и остановки движка. Метаданные
+ограничены 64 KiB, подписанный установщик — 256 MiB. До завершения движка
+проверяются версия, target, неизменяемый URL, полная подпись minisign и PE-версия.
+Прогресс виден в меню. Проверяемый запуск процесса Windows выполняет NSIS только
+после очистки движка; успешный запуск разрешает выход оболочки, ошибка сохраняет
+трей с инструкцией перезапуска. Это заменяет непроверяемый запуск Windows
+в официальном updater; сам запуск процесса не доказывает успешную установку
+и не обещает автоматический откат.
 
-See [signed update preparation and qualification](../../docs/UPDATES.md) for the
-local release scripts, dedicated key configuration, and remaining installed-update
-runtime checks. No channel or release was published by this change.
+См. [подготовку и проверку подписанных обновлений](../../docs/UPDATES.md): скрипты
+релиза, настройка отдельного ключа и оставшиеся проверки установки. Проверка
+подписи обновления отличается от подписи издателя Windows Authenticode.
 
-The native shell detects `GetUserDefaultUILanguage` at launch: Russian primary
-language selects RU; otherwise EN. It passes the normalized language to its Go
-engine and testcard. A standalone Go process detects Windows UI language itself.
-User content, protocol fields and profile values stay untranslated. For isolated
-native smoke only, `LUMATAPE_NATIVE_UI_TEST=1` plus `LUMATAPE_TEST_LANGUAGE=ru/en`
-overrides detection without changing Windows settings. No language preference is
-stored in the profile. Technical OS/driver details may remain in their original language.
+Нативная оболочка вызывает `GetUserDefaultUILanguage` при запуске: русский
+primary language выбирает RU, остальные — EN. Нормализованный язык передаётся
+движку Go и тестовой сцене. Отдельный Go-процесс определяет язык Windows сам.
+Пользовательский контент, поля протокола и значения профиля не переводятся.
+Только для изолированного native smoke комбинация `LUMATAPE_NATIVE_UI_TEST=1`
+и `LUMATAPE_TEST_LANGUAGE=ru/en` переопределяет язык без изменения Windows.
+Предпочтение языка в профиле не хранится. Технические подробности ОС/драйвера
+могут оставаться на исходном языке.
 
-From the repository root,
+Из корня репозитория команда
 `python3 desktop/scripts/licenses.py --output build/desktop-licenses/rust`
-collects full available texts from the locked Windows dependency graph using
-offline Cargo metadata. Run it after fetching/building dependencies. Missing
-full texts are errors; an SPDX declaration alone is not a replacement.
+собирает полные доступные тексты из закреплённого графа зависимостей Windows
+через offline Cargo metadata. Выполняйте после получения/сборки зависимостей.
+Отсутствующий полный текст — ошибка; декларация SPDX его не заменяет.
 
-The current packaging process also runs
+Упаковка также запускает
 `python3 desktop/scripts/npm-licenses.py --output build/desktop-licenses/npm`.
-It preserves the locked npm and copied shadcn license notices associated with
-the retained UI source. Their presence does not mean React is loaded by the
-tray host. The collector reads installed dependencies after `npm ci`, performs
-no network request, records integrity/source, and rejects missing texts or
-version mismatches. `node_modules` is not included. Packaging verifies lock and
-provenance hashes and each text checksum, copying only manifest-listed paths
-alongside native notices; sync-conflict `LICENSE 2` copies cannot enter the ZIP.
+Она сохраняет уведомления закреплённых npm-зависимостей и скопированных компонентов
+shadcn из архивного UI. Это не означает загрузку React в оболочку трея. Сборщик
+читает установленные зависимости после `npm ci`, не обращается в сеть, записывает
+integrity/источник и отклоняет отсутствие текстов или несовпадение версий.
+`node_modules` не включается. Упаковка проверяет хеши lock-файлов, происхождения
+и каждого текста, копируя только перечисленные в манифесте пути вместе с нативными
+уведомлениями. Конфликтные копии синхронизации `LICENSE 2` не могут попасть в ZIP.
 
-Match concrete artifact hashes to the release checksum and package manifest.
-The [Windows protocol](../../docs/WINDOWS_VALIDATION.md) separates
-Windows, GPU, display and update qualification. A
-process/window inventory proves only that inventory, not every menu command,
-shader appearance, physical keyboard delivery or recovery scenario.
+Сверяйте конкретные хеши с контрольными суммами релиза и манифестом пакета.
+[Протокол Windows](../../docs/WINDOWS_VALIDATION.md) разделяет проверки Windows,
+GPU, дисплея и обновлений. Список процессов/окон подтверждает только этот список,
+а не каждую команду меню, вид шейдеров, доставку с физической клавиатуры или
+сценарий восстановления.

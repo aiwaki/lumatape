@@ -106,6 +106,9 @@ func TestPublicDocsExcludeLocalCheckpointAndUnlistedFiles(t *testing.T) {
 		t.Fatal(err)
 	}
 	for _, name := range append(append([]string{}, publicDocs...), "CURRENT_STATE.md", "local-session.md") {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(root, "docs", name)), 0755); err != nil {
+			t.Fatal(err)
+		}
 		if err := os.WriteFile(filepath.Join(root, "docs", name), []byte(name), 0644); err != nil {
 			t.Fatal(err)
 		}
@@ -118,9 +121,11 @@ func TestPublicDocsExcludeLocalCheckpointAndUnlistedFiles(t *testing.T) {
 			t.Fatalf("private document copied: %s: %v", name, err)
 		}
 	}
-	files, err := os.ReadDir(filepath.Join(stage, "docs"))
-	if err != nil || len(files) != len(publicDocs) {
-		t.Fatal(files, err)
+	for _, name := range publicDocs {
+		data, err := os.ReadFile(filepath.Join(stage, "docs", name))
+		if err != nil || string(data) != name {
+			t.Fatalf("public document missing or altered: %s: %v", name, err)
+		}
 	}
 	records, err := sourceRecords(root)
 	if err != nil {

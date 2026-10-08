@@ -1,10 +1,12 @@
-# Windows IPC lifecycle smoke
+# Проверка жизненного цикла Windows IPC
 
-Developer helper for the real Go engine. Run in an interactive Windows desktop,
-with a separately started test card and no other LumaTape engine. The engine
-executable must have its normal GLFW/capture DLLs beside it. The lifecycle/EOF
-cases do not automate input. No case changes the system display mode or modifies
-the main user profile.
+Русский · [English](README.en.md)
+
+Инструмент разработчика для проверки настоящего движка на Go. Запускайте его в
+интерактивном сеансе Windows с отдельно открытой тестовой сценой; другие
+экземпляры движка LumaTape должны быть закрыты. Рядом с EXE движка должны лежать
+его обычные DLL GLFW и захвата. Сценарии lifecycle/EOF не автоматизируют ввод.
+Ни один сценарий не меняет системный видеорежим или основной профиль пользователя.
 
 ```powershell
 .\windows-control-smoke.exe --engine C:\LumaTape\lumatape-controlled.exe --target-pid 1234 --case lifecycle --expect-gpu-unavailable --output C:\LumaTape\ipc-lifecycle
@@ -12,119 +14,132 @@ the main user profile.
 .\windows-control-smoke.exe --engine C:\LumaTape\lumatape-controlled.exe --target-pid 1234 --case input --input-helper C:\LumaTape\lumatape-source-input.exe --target-exe C:\LumaTape\lumatape-testcard.exe --output C:\LumaTape\ipc-input
 ```
 
-Use the actual test card PID. If that process has multiple eligible windows,
-also pass `--target-title "VHS test card"` with its exact current title. Omit
-`--expect-gpu-unavailable` on a GPU where the native interop path may work; this
-flag explicitly requires GPU rejection and is intended for the Parallels fixture.
-Without `--output`, artifacts go to a new private temporary directory.
-Process creation has a separate 15-second deadline (`--startup-timeout 1s..60s`).
-JSONL `process_start_begin`, `process_started` or `process_start_timeout` identify
-whether failure preceded protocol readiness. On startup timeout only parent pipe
-ends close: a late engine receives EOF, and the helper never calls process Kill.
-`process-start-timeout-stacks.txt` captures the helper's Go goroutines to locate
-the blocked startup call. A DPI setup refusal fails before geometry testing;
-the helper never treats an unverified DPI context as physical-pixel evidence.
+Укажите фактический PID тестовой сцены. Если у процесса несколько подходящих
+окон, добавьте `--target-title "VHS test card"` с точным текущим заголовком.
+На GPU с возможной поддержкой interop не указывайте `--expect-gpu-unavailable`:
+этот флаг требует явного отказа GPU-пути и предназначен для тестовой среды
+Parallels. Без `--output` артефакты сохраняются в новом отдельном временном каталоге.
+На создание процесса отведён отдельный срок — 15 секунд
+(`--startup-timeout 1s..60s`). События JSONL `process_start_begin`,
+`process_started` и `process_start_timeout` позволяют определить, произошла ли
+ошибка до готовности протокола. При тайм-ауте запуска закрываются только
+родительские концы каналов: запоздавший движок получает EOF. Инструмент никогда
+не вызывает Kill для процесса. Файл `process-start-timeout-stacks.txt`
+содержит стеки горутин инструмента для поиска заблокированного вызова запуска.
+Отказ настройки DPI завершает проверку до тестирования геометрии; неподтверждённый
+DPI-контекст не считается доказательством работы в физических пикселях.
 
-If startup fails again, first preserve its JSONL, stack dump, stderr and protocol
-log. `process_start_begin` without `process_started` points to process creation;
-`process_started` without `ready` points to engine initialization/protocol.
-Record the exact engine/helper SHA-256 and, while the owned processes still live,
-their PID, parent PID, session, executable path, command line, CPU and thread wait
-states. Compare a direct launch of the same engine from the same directory only
-after the prior helper has exited and its child cleanup is known. Do not change
-the GPU backend or assume an ARM/driver failure from missing `ready` alone.
+При повторном отказе запуска сначала сохраните JSONL, дамп стеков, stderr и
+журнал протокола. `process_start_begin` без `process_started` указывает на
+создание процесса; `process_started` без `ready` — на инициализацию движка или
+протокола. Запишите точные SHA-256 движка и инструмента, а пока принадлежащие
+проверке процессы живы — их PID, родительский PID, сеанс, путь EXE, командную
+строку, CPU и состояния ожидания потоков. Сравнивайте с прямым запуском того же
+движка из того же каталога только после выхода предыдущего инструмента и
+проверки завершения его дочерних процессов. Отсутствие `ready` само по себе
+не повод менять GPU-backend или считать причиной ARM/драйвер.
 
-The lifecycle case checks correlated protocol replies, exact live source
-identity, explicit Full CPU plus rounded screen and actual 4:3 client resize,
-configuration preservation after rejected GPU/reload requests, real renderer
-PNG previews before/after, exact original outer rectangle after emergency, and
-cleanup acknowledgement followed by exit code 0. The EOF case closes host stdin
-after applying the window change and requires exit code 0 plus exact restoration.
-It never force-kills the engine on timeout.
+Сценарий lifecycle проверяет соответствие ответов запросам, точную идентичность
+живого источника, явный Full CPU со скруглённым экраном и фактическое изменение
+клиентской области до 4:3. Он также проверяет сохранение конфигурации после
+отклонённых запросов GPU/reload, PNG-предпросмотр настоящего рендерера до/после,
+точное восстановление внешнего прямоугольника после аварийного отключения,
+подтверждение очистки и последующий выход с кодом 0. Сценарий EOF закрывает stdin
+движка после изменения окна и требует выхода с кодом 0 и точного восстановления.
+При тайм-ауте движок не завершается принудительно.
 
-Artifacts include a private `config.json`, engine diagnostic log/stderr, compact
-protocol log, and preview PNGs. The output JSONL records assertions, not evidence
-of live foreground rendering: the helper deliberately does not focus the target.
-Full capture visibility, mouse alignment, native GPU support, and physical display
-mode restoration require their separate Windows tests. Each run temporarily
-resizes the chosen test card and restores it through the engine's cleanup path.
+Артефакты включают отдельный `config.json`, диагностический журнал и stderr
+движка, компактный журнал протокола и PNG предпросмотра. Выходной JSONL содержит
+результаты проверок, но не подтверждает показ поверх активного окна: инструмент
+намеренно не переводит фокус на источник. Видимость Full-захвата, совпадение
+координат мыши, нативный GPU и восстановление физического видеорежима требуют
+отдельных Windows-тестов. Каждый запуск временно меняет размер выбранной тестовой
+сцены и восстанавливает его штатной очисткой движка.
 
-The explicit `input` case invokes the separately built
-`scripts/windows-ui-smoke/cmd/source-input` helper; the main module has no makc
-dependency. Both helper and testcard paths must be absolute. That helper validates
-the exact live PID/executable and `LumaTape.Native.TestCard` window class, checks
-foreground ownership before SendInput, and releases its keys/buttons on failure.
-The case selects Full CPU, rounded screen, mouse-exact input, window 4:3 and
-`Ctrl+Shift+9` / `Ctrl+Shift+0` in its private profile. It explicitly focuses the
-owned testcard, waits for actual `full-compatibility` presentation, checks one real
-click count increment, then checks exact hotkey receipt deltas and filter state
-after off/on. While window 4:3 remains enabled, filter-off must reach actual Full
-`bypass` with effective intensity 0; filter-on must reach `active` at intensity 1.
-Both toggles preserve the exact formatted client/outer rectangles and all saved
-preferences except `enabled` (including the rounded shape to restore on enable).
-The live renderer receives a flat effective shape when the filter is off; this
-helper verifies status and geometry, not the framebuffer pixels of that bypass.
-A real emergency combo must advance its receipt and emergency
-sequence, disable both filter and format, clear recovery, and restore the exact
-original outer rectangle. A stale apply must remain rejected; quit must acknowledge
-cleanup and exit 0. Step reports and authoritative snapshots are saved beside the
-JSONL log. Missing focus, duplicate/missing receipts or an inactive Full backend
-fail the case. An input helper timeout is reported without force-killing it while
-deferred key release may still be necessary. This proves Windows SendInput delivery
-on that desktop, not physical Mac keyboard/Parallels key translation.
+Явный сценарий `input` вызывает отдельно собранный инструмент
+`scripts/windows-ui-smoke/cmd/source-input`; основной модуль не зависит от makc.
+Пути инструмента и тестовой сцены должны быть абсолютными. Инструмент проверяет
+точную пару живого PID/EXE и класс окна `LumaTape.Native.TestCard`, проверяет
+владение активным окном перед SendInput и отпускает свои клавиши/кнопки при ошибке.
+Сценарий выбирает в отдельном профиле Full CPU, скруглённый экран, mouse-exact,
+оконный 4:3 и сочетания `Ctrl+Shift+9` / `Ctrl+Shift+0`. Затем он явно активирует
+собственную тестовую сцену, ждёт фактического показа `full-compatibility`,
+проверяет увеличение счётчика реальных кликов ровно на один и точные приращения
+счётчиков получения команд и состояния фильтра при выключении/включении.
+Пока оконный 4:3 включён, выключение фильтра должно давать фактический Full
+`bypass` с интенсивностью 0, а включение — `active` с интенсивностью 1.
+Оба переключения сохраняют точные клиентский и внешний прямоугольники окна
+и все настройки кроме `enabled`, включая скругление, которое вернётся при включении.
+При выключении рендерер получает плоскую эффективную форму; здесь проверяются
+состояние и геометрия, а не пиксели буфера такого bypass.
+Реальное аварийное сочетание должно увеличить счётчики получения команды и
+аварийных действий, выключить фильтр и формат, очистить запись восстановления
+и вернуть точный исходный внешний прямоугольник. Устаревший Apply должен
+отклоняться; Quit должен подтвердить очистку и завершиться с кодом 0.
+Отчёты шагов и фактические снимки состояния сохраняются рядом с JSONL.
+Отсутствие фокуса, пропущенные/повторные команды или неактивный Full приводят
+к провалу сценария. Тайм-аут инструмента ввода фиксируется без его принудительного
+завершения: ему ещё может понадобиться отпустить клавиши. Это подтверждает
+доставку SendInput в данном Windows-сеансе, а не передачу физической
+Mac-клавиатуры через Parallels.
 
-Fixture regression: child processes use `CREATE_NO_WINDOW` without Go's
-`SysProcAttr.HideWindow`. `HideWindow` adds `STARTF_USESHOWWINDOW/SW_HIDE`, which
-overrides the child's first `ShowWindow` call. For source-input, that call targets
-the testcard: the faulty launcher made its HWND foreground but invisible, leaving
-the engine correctly paused with no Full frames. Do not reintroduce that flag to
-suppress consoles; the separate creation flag already does that. The source
-visibility/backend assertion remains required.
+Регрессионное ограничение: дочерние процессы используют `CREATE_NO_WINDOW`
+без Go-флага `SysProcAttr.HideWindow`. `HideWindow` добавляет
+`STARTF_USESHOWWINDOW/SW_HIDE`, который переопределяет первый `ShowWindow`
+дочернего процесса. У source-input этот вызов относится к тестовой сцене:
+ошибочный запуск оставлял HWND активным, но невидимым, и движок корректно
+ставил показ на паузу без кадров Full. Не возвращайте этот флаг ради скрытия
+консолей: для этого уже используется отдельный флаг создания процесса.
+Проверка видимости источника и backend остаётся обязательной.
 
-The `shaders` case uses the real renderer and bundled-format examples:
+Сценарий `shaders` использует настоящий рендерер и примеры в формате LumaTape:
 
 ```powershell
 .\windows-control-smoke.exe --engine C:\LumaTape\lumatape-engine.exe --target-pid 1234 --case shaders --expect-gpu-unavailable --shader-file C:\LumaTape\examples\shaders\amber-crt.lumatape.glsl --secondary-shader-file C:\LumaTape\examples\shaders\cold-bleed.lumatape.glsl --output C:\LumaTape\shader-smoke
 ```
 
-This fixture requires the known unsupported-interop Parallels environment. It
-keeps `capture.transfer=auto` in the saved config and requires a successful CPU
-Open, exact shader defaults and actual window 4:3. Import runs real GLSL compile;
-a parser-valid body with an undefined function must return `shader_compile_failed`
-without writing an asset or changing config, source geometry or the owned live
-program ID. Duplicate import must retain one immutable ID; library/source roundtrip
-must match. Decoded PNG pixels must show exact 0% bypass, a visible 100% difference
-and opaque alpha. Previewing Cold Bleed must leave the live Amber program/config
-unchanged. Out-of-range parameters and a warp shader under mouse-exact input must
-be rejected atomically. Emergency restores the exact original rectangle, rejects
-a stale Apply, and Quit requires cleanup ACK followed by exit 0.
+Этот сценарий требует известной среды Parallels без поддержки interop.
+Он сохраняет `capture.transfer=auto` в конфигурации и требует успешного Open
+через CPU, точных значений шейдера по умолчанию и фактического оконного 4:3.
+Импорт выполняет настоящую компиляцию GLSL: допустимое для парсера тело с
+неопределённой функцией должно вернуть `shader_compile_failed`, не записав
+файл и не изменив конфигурацию, геометрию источника или ID текущей программы.
+Повторный импорт сохраняет один неизменяемый ID; чтение библиотеки и исходника
+должно возвращать те же данные. Декодированные пиксели PNG должны показывать
+точный bypass при 0%, видимое отличие при 100% и непрозрачную alpha.
+Предпросмотр Cold Bleed не меняет текущую программу Amber и её конфигурацию.
+Параметры вне диапазона и warp-шейдер в mouse-exact отклоняются атомарно.
+Аварийное отключение восстанавливает точный исходный прямоугольник и отклоняет
+устаревший Apply; Quit требует ACK очистки и последующего выхода с кодом 0.
 
-Only this child receives `LOCALAPPDATA=<output>\local-app-data`: its imported
-shader library and diagnostics stay separate from the user's real library.
-The source files are read from the two explicit absolute paths. The case does
-not focus or inject input unless both `--input-helper` and `--target-exe` are
-provided; those flags add only a validated foreground request for the owned
-testcard and an actual Full-active assertion. The PNGs remain synthetic renderer
-previews, not captured game screenshots. `shader-summary.json` distinguishes
-that optional foreground evidence; final STOP/Quit assertions are in JSONL.
+Только этот дочерний процесс получает `LOCALAPPDATA=<output>\local-app-data`:
+его библиотека импортированных шейдеров и диагностика отделены от пользовательских.
+Исходники читаются по двум явно заданным абсолютным путям. Сценарий не меняет
+фокус и не вводит события, пока не указаны оба флага `--input-helper` и
+`--target-exe`. Они добавляют только проверенный запрос фокуса для собственной
+тестовой сцены и проверку фактического Full-active. PNG остаются синтетическими
+кадрами предпросмотра рендерера, а не скриншотами игры. `shader-summary.json`
+отдельно отмечает эту необязательную проверку активного окна; итоговые проверки
+STOP/Quit находятся в JSONL.
 
-The explicit `presets` case qualifies all five builtins on the unsupported-GPU
-Parallels fixture without changing the testcard size or display mode:
+Явный сценарий `presets` проверяет все пять встроенных эффектов в среде Parallels
+без GPU interop, не меняя размер тестовой сцены или видеорежим:
 
 ```powershell
 .\windows-control-smoke.exe --engine C:\LumaTape\lumatape-engine.exe --target-pid 1234 --case presets --expect-gpu-unavailable --input-helper C:\LumaTape\lumatape-source-input.exe --target-exe C:\LumaTape\lumatape-testcard.exe --output C:\LumaTape\presets-smoke
 ```
 
-Each preset applies Full Auto, intensity 1, flat shape and format off, foregrounds
-only the exact testcard PID/executable through the existing input helper, and
-requires an `active`/`full-compatibility` snapshot. Both outer and client RECTs
-must remain unchanged. Original 4:3 is recorded, never achieved by resizing.
-The six `*-synthetic-preview.png` files use the renderer's test scene: they are
-**not WGC screenshots or captured-game A/B evidence**. The summary is written
-only after emergency restoration, stale-Apply rejection and clean Quit/exit 0.
-Failed cases also attempt the same cleanup before the outer EOF fallback.
+Каждый пресет применяет Full Auto, интенсивность 1, плоскую форму и выключенный
+формат. Через существующий инструмент ввода активируется только тестовая сцена
+с точной парой PID/EXE; требуется снимок состояния `active`/`full-compatibility`.
+Внешний и клиентский RECT должны оставаться прежними. Исходный 4:3 фиксируется
+как факт, а не достигается изменением размера. Шесть файлов
+`*-synthetic-preview.png` используют тестовую сцену рендерера: это
+**не WGC-скриншоты и не A/B захваченной игры**. Итоговый отчёт записывается только
+после аварийного восстановления, отклонения устаревшего Apply и чистого Quit
+с выходом 0. При неудаче выполняется та же очистка перед резервным закрытием EOF.
 
-Build from the repository root:
+Сборка из корня репозитория:
 
 ```sh
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -o artifacts/polish-validation/windows-control-smoke.exe ./scripts/windows-control-smoke

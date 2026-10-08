@@ -1,17 +1,17 @@
-# Third-party components
+# Сторонние компоненты
 
-* GLFW 3.4, zlib/libpng license — pinned commit `a74efa0d5628b74adc0426af4c5710e287fa7c2c`. CMake installs the upstream LICENSE.md beside distributed binaries.
-* Go runtime/standard library, BSD — license retained for the Go executables.
-* Microsoft C++/WinRT, MIT — Windows SDK projection/runtime headers used by the optional capture bridge.
-* Microsoft STL, Apache-2.0 WITH LLVM-exception — C++ standard-library headers used by the native bridge.
-* Rust/Tauri dependency notices — collected from the locked Windows Cargo graph by `desktop/scripts/licenses.py`; full texts and pinned supplemental provenance accompany the bundle.
-* React, Radix, Lucide and other frontend runtime dependencies — collected from the npm lock by `desktop/scripts/npm-licenses.py`, including Tailwind/generated-CSS notices where applicable. Package version, registry source/integrity and text hashes are retained; build tools and node_modules are not shipped.
-* shadcn/ui copied components — upstream MIT license and pinned provenance are retained in `frontend-provenance.json` and included in the generated frontend notices. Exact generated components are listed in `desktop/ui/README.md`.
+**Русский** · [English](README.en.md)
 
-These notices apply to the listed dependencies; the root MIT license covers LumaTape's own code. Lightweight-only distributions do not include the optional capture bridge.
+* GLFW 3.4, лицензия zlib/libpng — закреплённый коммит `a74efa0d5628b74adc0426af4c5710e287fa7c2c`. CMake устанавливает исходный LICENSE.md рядом с распространяемыми бинарными файлами.
+* Go runtime и стандартная библиотека, BSD — лицензия сохранена для исполняемых файлов Go.
+* Microsoft C++/WinRT, MIT — заголовки проекции/runtime из Windows SDK, используемые необязательным модулем захвата.
+* Microsoft STL, Apache-2.0 WITH LLVM-exception — заголовки стандартной библиотеки C++, используемые нативным модулем.
+* Зависимости Rust/Tauri — полные тексты лицензий собирает `desktop/scripts/licenses.py` по закреплённому графу Cargo для Windows; вместе с ними поставляются закреплённые сведения о дополнительных источниках.
+* React, Radix, Lucide и другие runtime-зависимости frontend — собираются из npm lock с помощью `desktop/scripts/npm-licenses.py`, включая уведомления Tailwind/генерируемого CSS, где они применимы. Сохраняются версии пакетов, источник/integrity реестра и хеши текстов; инструменты сборки и node_modules не поставляются.
+* Скопированные компоненты shadcn/ui — исходная MIT-лицензия и закреплённые сведения о происхождении находятся в `frontend-provenance.json` и входят в сгенерированные уведомления frontend. Список компонентов приведён в `desktop/ui/README.md`.
 
-Windows SDK and MSVC build files remain external build-tool dependencies; their headers and import libraries are not vendored or included in the application bundle.
+Эти уведомления относятся к перечисленным зависимостям; корневая MIT-лицензия покрывает собственный код LumaTape. В сборки только с Lightweight необязательный модуль захвата не входит.
 
-Release packaging copies four explicit native notices and only manifest-declared
-Rust/npm full-text paths. It rechecks lock/provenance/text hashes and regenerates
-reader indexes; unreferenced files and sync-conflict copies are excluded.
+Windows SDK и MSVC остаются внешними инструментами сборки; их заголовки и библиотеки импорта не добавлены в репозиторий и не входят в комплект приложения.
+
+Упаковка релиза копирует четыре явно заданных нативных уведомления и только указанные в манифестах полные тексты Rust/npm. Она повторно проверяет хеши lock-файлов, сведений о происхождении и текстов, заново создавая индексы для чтения. Неуказанные файлы и конфликтные копии синхронизации исключаются.

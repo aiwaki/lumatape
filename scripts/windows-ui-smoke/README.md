@@ -1,6 +1,8 @@
-# Windows UI smoke tools
+# Инструменты проверки Windows UI
 
-Developer-only tools in a separate Go module. LumaTape itself has no makc dependency or injected input. Build on any Go host; run only on an explicitly chosen Windows test desktop:
+Русский · [English](README.en.md)
+
+Инструменты разработчика в отдельном Go-модуле. Сам LumaTape не зависит от makc и не внедряет события ввода. Собирать можно на любой системе с Go; запускать — только в явно выбранном тестовом сеансе Windows:
 
 ```sh
 cd scripts/windows-ui-smoke
@@ -10,18 +12,18 @@ GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../../artifacts/pr
 GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o ../../artifacts/production-polish/lumatape-pointer-input.exe ./cmd/pointer-input
 ```
 
-The tools require the exact PID and executable path. They hold a handle to that process, validate its live image path and the HWND owner/class, and never force-terminate attached processes. Settings `quit` is an explicit graceful close request to the validated same-PID controller. The harness that starts app/testcard processes must retain and clean up only its own process handles/PIDs. These tools do not launch or enumerate processes by filename for termination.
+Инструменты требуют точные PID и путь EXE. Они удерживают дескриптор процесса, проверяют путь живого процесса, владельца и класс HWND и никогда не завершают присоединённые процессы принудительно. Команда `quit` для Settings явно запрашивает штатное закрытие проверенного контроллера с тем же PID. Среда, запускающая приложение и тестовую сцену, должна сохранять и завершать только собственные процессы по удерживаемым дескрипторам/PID. Эти инструменты не запускают и не ищут процессы по имени файла для завершения.
 
-## Native Settings controls
+## Элементы нативного окна настроек
 
-Open Settings first, then inspect or execute a UTF-8 JSON array of steps:
+Сначала откройте настройки, затем выполните осмотр или шаги из UTF-8 JSON-массива:
 
 ```powershell
 .\lumatape-ui-smoke.exe -pid $app.Id -exe $app.Path -output inspect.jsonl
 .\lumatape-ui-smoke.exe -pid $app.Id -exe $app.Path -steps steps.json -config test-config.json -log lumatape.log -output result.jsonl
 ```
 
-The output file avoids PowerShell 5 native-pipeline encoding conversion. One UTF-8 JSON record per step contains the actual controls and optional on-disk config/log tail. An assertion mismatch exits 1. The class must be `LumaTape.Settings`. `WM_SETTEXT`, `CB_SETCURSEL` plus `CBN_SELCHANGE`, and `BM_CLICK` are sent with a two-second timeout. This tests application control handling; it does not prove physical keyboard/mouse delivery.
+Выходной файл исключает преобразование кодировки native pipeline в PowerShell 5. Каждый шаг записывается отдельной UTF-8 JSON-строкой с фактическими элементами интерфейса и, при необходимости, конфигурацией с диска и концом журнала. Несовпадение ожидаемого результата завершает инструмент с кодом 1. Класс окна должен быть `LumaTape.Settings`. Сообщения `WM_SETTEXT`, `CB_SETCURSEL` с `CBN_SELCHANGE` и `BM_CLICK` отправляются с тайм-аутом две секунды. Это проверяет обработку элементов приложения, но не доставку событий физической клавиатуры или мыши.
 
 ```json
 [
@@ -36,13 +38,13 @@ The output file avoids PowerShell 5 native-pipeline encoding conversion. One UTF
 ]
 ```
 
-Actions: `inspect`, `foreground`, `select` (ID/index), `text` (ID/text), `check` (ID/index 0 or 1), `click` (ID), `wait` (0..5000 ms), `quit` (last step only). `quit` sends `WM_CLOSE` to same-PID `LumaTape.Control`, waits up to five seconds for a real exit, requires exit code 0, and captures config/log after shutdown. It also works without an open Settings window. Expectations: `expect-select`, `expect-text` (substring), `expect-check`, `expect-visible`, `expect-enabled` (index 0 or 1), `expect-config` (dotted field/exact JSON value), `expect-log` (substring in the last 32 KiB). Inspect current IDs/options before mutation; the source list order is dynamic. `expect-log` can match an earlier event, so use a fresh log or compare the session/timestamp in collected records when proving a new transition.
+Действия: `inspect`, `foreground`, `select` (ID/index), `text` (ID/text), `check` (ID/index 0 или 1), `click` (ID), `wait` (0..5000 мс), `quit` (только последний шаг). `quit` отправляет `WM_CLOSE` окну `LumaTape.Control` того же PID, ждёт фактического выхода до пяти секунд, требует код 0 и сохраняет конфигурацию/журнал после завершения. Команда работает и без открытого окна настроек. Проверки: `expect-select`, `expect-text` (подстрока), `expect-check`, `expect-visible`, `expect-enabled` (index 0 или 1), `expect-config` (поле с точками/точное JSON-значение), `expect-log` (подстрока в последних 32 KiB). Перед изменениями проверьте текущие ID и варианты: порядок источников динамический. `expect-log` может совпасть со старым событием; для подтверждения нового перехода используйте свежий журнал или сравните сеанс/время в собранных записях.
 
-The helper intentionally does not auto-answer system-mode confirmation or choose a display mode. Destructive display mutations must have an explicit test case and the app's watchdog/confirmation protections.
+Инструмент намеренно не отвечает автоматически на подтверждение системного режима и не выбирает видеорежим. Такие изменения дисплея требуют явного тестового сценария и штатной защиты подтверждением/watchdog.
 
-## Real testcard input through makc
+## Реальный ввод в тестовую сцену через makc
 
-`makc` is pinned to v0.2.0, commit `31d0078d4ad8f3c10423016974a698280c2939f2`. Its purpose here is actual Win32 `SendInput` for source click-through, drag/resize, and hotkey delivery inside Windows. The original makc and x/sys notices are preserved in `licenses/`; the Go runtime notice is in the repository's `third_party/Go-LICENSE.txt`.
+`makc` закреплён на v0.2.0, commit `31d0078d4ad8f3c10423016974a698280c2939f2`. Здесь он нужен для настоящего Win32 `SendInput`: проверки клика сквозь эффект, перемещения/resize и доставки горячих клавиш в Windows. Исходные лицензии makc и x/sys сохранены в `licenses/`; лицензия Go runtime — в `third_party/Go-LICENSE.txt` корня репозитория.
 
 ```powershell
 .\lumatape-source-input.exe -pid $card.Id -exe $card.Path -action inspect -output source-before.json
@@ -54,15 +56,15 @@ The helper intentionally does not auto-answer system-mode confirmation or choose
 .\lumatape-source-input.exe -pid $card.Id -exe $card.Path -action restore -output restored.json
 ```
 
-The source class must be `LumaTape.Native.TestCard`. The helper uses per-monitor DPI v2 and virtual-desktop physical coordinates. It requests foreground explicitly, checks ownership/foreground before injection and every drag step, refuses already held buttons/keys, and releases its injected holds on failure. `minimize`/`restore` use `ShowWindow` on the validated source and assert the actual `IsIconic` state; the report includes before/after rectangles. Drag/resize must change the actual window rectangle; click must increment the testcard's `LumaTape.TestCard.Clicks` property exactly once. The property stores the same counter drawn on the card, plus one; older cards without it fail the click oracle rather than passing silently.
+Класс источника должен быть `LumaTape.Native.TestCard`. Инструмент использует per-monitor DPI v2 и физические координаты виртуального рабочего стола. Он явно запрашивает фокус, проверяет владельца/активное окно до ввода и на каждом шаге перетаскивания, отклоняет уже зажатые кнопки/клавиши и отпускает собственные нажатия при ошибке. `minimize`/`restore` вызывают `ShowWindow` для проверенного источника и проверяют фактический `IsIconic`; отчёт включает прямоугольники до/после. Drag/resize должны реально изменить прямоугольник окна; click — увеличить свойство `LumaTape.TestCard.Clicks` ровно на один. Свойство хранит видимый на сцене счётчик плюс один. Старые сцены без свойства не проходят проверку клика.
 
-Hotkey injection success alone is not a delivery assertion. Follow it with Settings `expect-text`/`expect-config`, inspect diagnostics command counts, and verify the visible effect. Windows `SendInput` does not qualify the physical Mac Option/Fn → Parallels key path. No script here changes host shortcuts, VM settings, system mouse speed, or installs hooks.
+Успешный ввод сочетания сам по себе не подтверждает доставку команды. Затем проверьте Settings через `expect-text`/`expect-config`, счётчики команд в диагностике и видимый эффект. Windows `SendInput` не проверяет путь физической Mac-клавиатуры Option/Fn → Parallels. Скрипты не меняют горячие клавиши хоста, настройки VM, системную скорость мыши и не устанавливают хуки.
 
-Microsoft API contracts: [SendMessageTimeoutW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw), [CB_SETCURSEL](https://learn.microsoft.com/en-us/windows/win32/controls/cb-setcursel), [BM_CLICK](https://learn.microsoft.com/en-us/windows/win32/controls/bm-click).
+Контракты Microsoft API: [SendMessageTimeoutW](https://learn.microsoft.com/en-us/windows/win32/api/winuser/nf-winuser-sendmessagetimeoutw), [CB_SETCURSEL](https://learn.microsoft.com/en-us/windows/win32/controls/cb-setcursel), [BM_CLICK](https://learn.microsoft.com/en-us/windows/win32/controls/bm-click).
 
-## Projected cursor and source lifecycle
+## Проецируемый курсор и жизненный цикл источника
 
-Build the separate source scene from the repository root with `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o artifacts/production-polish/lumatape-testcard.exe ./cmd/lumatape-testcard`, then launch it in Windows with `-pointer-test`. Its title is `LumaTape pointer test`; the ordinary testcard remains unchanged. Select this exact scene in LumaTape and enable the static convex configuration before testing. The independent mapping oracle assumes the source and overlay have identical physical bounds, no crop/DAR change, no jitter/tracking, and the shader curvature supplied by `-curvature`.
+Соберите отдельную сцену из корня репозитория командой `GOOS=windows GOARCH=amd64 CGO_ENABLED=0 go build -trimpath -o artifacts/production-polish/lumatape-testcard.exe ./cmd/lumatape-testcard`, затем запустите её в Windows с `-pointer-test`. Заголовок — `LumaTape pointer test`; обычная тестовая сцена не меняется. Выберите именно это окно в LumaTape и включите статическую выпуклость перед проверкой. Независимая проверка координат предполагает одинаковые физические границы источника и оверлея, отсутствие crop/изменения DAR, jitter/tracking и кривизну шейдера, заданную `-curvature`.
 
 ```powershell
 .\lumatape-testcard.exe -pointer-test -width 960 -height 720
@@ -70,15 +72,15 @@ Build the separate source scene from the repository root with `GOOS=windows GOAR
 .\lumatape-pointer-input.exe -pid $sourcePID -exe $sourceExe -worker-pid $workerPID -worker-exe $workerExe -action drag -target 5 -dx 80 -dy 40 -curvature 0.7 -output drag.json
 ```
 
-Actions are `inspect`, `move`, `targets` (all five hover/click targets), `drag`, `wheel` (+120), and `held-disable` (hold left mouse, send `ctrl+shift+0`, verify restoration, release). `-target` selects 1–5; `-disable-keys` changes the explicit hotkey. `-projection visible` is the default; `hidden` requires the worker to have restored the native cursor, and `ignore` is only a baseline without projection assertions. Worker PID/exe are required except with `ignore`. The helper verifies native source events, real cursor coordinates, source capture ownership, worker identity, and actual cursor-window position plus the native hotspot. Hover is awaited as an event result, independently of cursor-position convergence. JSON is written directly as UTF-8; exit 1 means an assertion failed.
+Действия: `inspect`, `move`, `targets` (наведение/клик по всем пяти целям), `drag`, `wheel` (+120) и `held-disable` (зажать левую кнопку, отправить `ctrl+shift+0`, проверить восстановление и отпустить кнопку). `-target` выбирает цель 1–5; `-disable-keys` меняет явное сочетание. По умолчанию используется `-projection visible`; `hidden` требует восстановленного системного курсора, а `ignore` служит только исходной проверкой без проверки проекции. PID/EXE worker обязательны, кроме режима `ignore`. Инструмент проверяет нативные события источника, реальные координаты курсора, владельца захвата мыши, идентичность worker и фактическую позицию окна курсора с учётом нативной активной точки. Наведение ожидается как результат события независимо от достижения курсором позиции. JSON пишется напрямую в UTF-8; код выхода 1 означает провал проверки.
 
-Two explicit manual protocols live one directory above this module. Both scripts retain UTF-8 BOM for Windows PowerShell 5, require an existing output directory, and write JSON on failure:
+Два явных ручных протокола находятся на каталог выше. Оба скрипта сохраняют UTF-8 BOM для Windows PowerShell 5, требуют существующий каталог вывода и записывают JSON при ошибке:
 
 ```powershell
 ..\windows-pointer-lifecycle-smoke.ps1 -RuntimeJson candidate-runtime.json -HelperPath .\lumatape-pointer-input.exe -Output lifecycle.json -Curvature 0.7
 ```
 
-Lifecycle metadata must contain `Bundle` (absolute candidate bundle directory), `HostPID`, and `SourcePID`. The script resolves only that bundle's host → engine → pointer-worker chain, pins native process creation times and HWND identities, and checks minimize → restore → resize → source close. It uses the pointer helper after restore/resize to verify mapping at the new bounds. **Closing the exact pointer-test scene is the final action.** It does not relaunch it. Failure before closure restores its original outer rectangle even if engine/worker failed. After its own `WM_CLOSE`, source exit is confirmed from the retained process handle; it does not read image metadata from the dying process.
+Метаданные жизненного цикла должны содержать `Bundle` (абсолютный каталог проверяемого комплекта), `HostPID` и `SourcePID`. Скрипт разрешает только цепочку host → engine → pointer-worker этого комплекта, фиксирует нативное время создания процессов и идентичность HWND и проверяет minimize → restore → resize → закрытие источника. После restore/resize инструмент ввода проверяет соответствие координат новым границам. **Закрытие именно этой pointer-test сцены — последнее действие.** Повторного запуска нет. Ошибка до закрытия восстанавливает исходный внешний прямоугольник даже при отказе engine/worker. После собственного `WM_CLOSE` выход подтверждается удерживаемым дескриптором; метаданные образа завершающегося процесса не читаются.
 
 ```powershell
 ..\windows-pointer-lease-smoke.ps1 `
@@ -88,10 +90,10 @@ Lifecycle metadata must contain `Bundle` (absolute candidate bundle directory), 
   -Output lease.json
 ```
 
-Lease inputs are exact PIDs, absolute executable paths and decimal native `GetProcessTimes` creation FILETIMEs for all three processes; use identity fields from the probes, not rounded CIM timestamps. Start with an active projection over the foreground source and no mouse buttons held. Only the engine is briefly suspended. A 1500 ms resume watchdog and C#/PowerShell `finally` blocks protect resume; the result requires the measured suspension to stay within 2000 ms. The probe checks cursor restoration after the 500 ms lease and fresh-frame recovery. `OverlayHiddenDuringSuspension` is separate: `ShowWindowAsync` may wait for the suspended engine, so cursor restoration alone does not prove the stale overlay disappeared.
+Для lease-проверки нужны точные PID, абсолютные пути EXE и десятичные FILETIME создания всех трёх процессов из `GetProcessTimes`; берите их из диагностических проверок, а не округлённых CIM-времён. Начальное состояние — активная проекция над активным источником, без зажатых кнопок мыши. Кратковременно приостанавливается только движок. Возобновление защищено watchdog на 1500 мс и блоками C#/PowerShell `finally`; измеренная пауза должна укладываться в 2000 мс. Проверяются возврат системного курсора после истечения 500-мс lease и восстановление по свежему кадру. `OverlayHiddenDuringSuspension` — отдельная проверка: `ShowWindowAsync` может ждать приостановленный движок, поэтому возврат курсора сам по себе не доказывает исчезновение устаревшего оверлея.
 
-For sustained capture checks, `pointer-input -action motion -duration 90s -projection ignore` moves through a deterministic path inside the pinned testcard. Duration is bounded to 1–180 seconds; foreground, geometry and button state are checked throughout. Each second it verifies the real cursor and delivered native mouse coordinates. It never presses a button. Run an independent overlay-visibility observer alongside it; this action does not claim to validate the cropped/warped cursor position. A hidden console launch must use `ProcessStartInfo.CreateNoWindow=true` and `UseShellExecute=false`, **not** `Start-Process -WindowStyle Hidden`: the latter supplies `STARTF_USESHOWWINDOW/SW_HIDE`, which overrides the helper's first `ShowWindow` and can hide the test source itself.
+Для длительной проверки захвата `pointer-input -action motion -duration 90s -projection ignore` двигает курсор по детерминированному пути внутри проверенной сцены. Длительность ограничена 1–180 секундами; фокус, геометрия и кнопки контролируются весь прогон. Каждую секунду проверяются реальный курсор и доставленные нативные координаты мыши. Кнопки не нажимаются. Параллельно запускайте независимое наблюдение за видимостью оверлея: это действие не проверяет положение курсора при crop/warp. Для запуска без консоли нужны `ProcessStartInfo.CreateNoWindow=true` и `UseShellExecute=false`, **не** `Start-Process -WindowStyle Hidden`: последний передаёт `STARTF_USESHOWWINDOW/SW_HIDE`, переопределяет первый `ShowWindow` инструмента и может скрыть саму тестовую сцену.
 
-`windows-overlay-visibility-smoke.ps1 -Runtime candidate-runtime.json -OutputDirectory <existing directory> -Label moving -Seconds 95` observes the identity-bound overlay independently every ~10 ms (Windows scheduling may produce a longer interval). The runtime record must contain the exact `Bundle`, `HostPID` and `SourcePID`. It reports source focus, visibility gaps, cursor coordinates and elapsed time, with raw CSV samples. It performs no input or screenshot capture. A zero-hidden result is meaningful only while the intended effect/format is actually enabled and the source stays foreground; confirm the menu/config and correlate the same UTC interval with engine logs. Benchmark host builds and unrelated GUI actions separately.
+`windows-overlay-visibility-smoke.ps1 -Runtime candidate-runtime.json -OutputDirectory <existing directory> -Label moving -Seconds 95` независимо наблюдает за привязанным к идентичности оверлеем примерно каждые 10 мс; планировщик Windows может увеличить интервал. Runtime-запись должна содержать точные `Bundle`, `HostPID` и `SourcePID`. Отчёт содержит фокус источника, интервалы невидимости, координаты курсора и прошедшее время, а также исходные CSV-выборки. Ввод и скриншоты не выполняются. Нулевое число скрытий значимо только при действительно включённом нужном эффекте/формате и сохранённом фокусе источника: проверьте меню/конфигурацию и сопоставьте тот же UTC-интервал с журналом движка. Измерения производительности сборки host и другие действия в GUI выполняйте отдельно.
 
-These protocols qualify guest Win32 events and owned-window lifecycle. They do not qualify physical Mac/Parallels input, arbitrary games, hardware GPU paths, or compositor visibility solely from `CURSOR_SHOWING`. No product input remapping or injected game input is introduced by these developer tools.
+Эти протоколы проверяют гостевые Win32-события и жизненный цикл принадлежащих тесту окон. Они не проверяют физический ввод Mac/Parallels, произвольные игры, аппаратный GPU-путь или видимость в композиторе только по `CURSOR_SHOWING`. Инструменты разработчика не добавляют в продукт переназначение или внедрение игрового ввода.
