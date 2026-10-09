@@ -7,7 +7,7 @@
 <p><strong>CRT и VHS для игр</strong><br>
 Телевизионные строки, мягкое свечение и искажения видеокассеты.</p>
 
-<p><a href="https://github.com/aiwaki/lumatape/releases/latest"><strong>Скачать для Windows ↗</strong></a> &nbsp; · &nbsp; <a href="docs/README.md">Документация</a> &nbsp; · &nbsp; <a href="README.en.md">English</a></p>
+<p><a href="https://github.com/aiwaki/lumatape/releases/latest"><strong>↗ Скачать для Windows</strong></a> &nbsp; · &nbsp; <a href="docs/README.md">Документация</a> &nbsp; · &nbsp; <a href="README.en.md">English</a></p>
 
 <img src="docs/images/signal-strip.svg" width="480" height="6" alt="">
 
@@ -27,3 +27,7 @@ LumaTape накладывает эффекты на окно игры и мож�
     <td colspan="2"><img src="docs/images/before-after.jpg" width="1928" alt="Сравнение тестовой сцены: слева без эффекта, справа с эффектом LumaTape"></td>
   </tr>
 </table>
+
+<hr>
+
+<p align="center"><sub>© 2026 <a href="https://github.com/aiwaki">aiwaki</a> &nbsp; · &nbsp; <a href="LICENSE">MIT</a> &nbsp; · &nbsp; <a href="third_party/README.md">Лицензии компонентов</a></sub></p>
