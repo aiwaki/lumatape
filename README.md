@@ -30,4 +30,4 @@ LumaTape накладывает эффекты на окно игры и мож�
 
 <hr>
 
-<p align="center"><sub>© 2026 <a href="https://github.com/aiwaki">aiwaki</a> &nbsp; · &nbsp; <a href="LICENSE">MIT</a> &nbsp; · &nbsp; <a href="third_party/README.md">Лицензии компонентов</a></sub></p>
+<p align="center"><sub><a href="LICENSE">MIT</a> &nbsp; · &nbsp; <a href="third_party/README.md">Лицензии компонентов</a></sub></p>

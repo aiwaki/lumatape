@@ -30,4 +30,4 @@ corners or a curved shape, like a vintage TV.
 
 <hr>
 
-<p align="center"><sub>© 2026 <a href="https://github.com/aiwaki">aiwaki</a> &nbsp; · &nbsp; <a href="LICENSE">MIT</a> &nbsp; · &nbsp; <a href="third_party/README.en.md">Component licenses</a></sub></p>
+<p align="center"><sub><a href="LICENSE">MIT</a> &nbsp; · &nbsp; <a href="third_party/README.en.md">Component licenses</a></sub></p>
