@@ -24,8 +24,8 @@ the engine stops and requests cleanup.
 
 | Command | Payload | Result |
 | --- | --- | --- |
-| `snapshot` | `{}` | config, snake_case runtime, five presets `{name,effects}`, screen_shapes, hotkeys, exact source or null, confirmation_deadline RFC3339 or null |
-| `sources` | `{}` | windows `{id,hwnd,pid,process_created,title}` and monitors `{id,index,device,bounds,work_area,primary}` |
+| `snapshot` | `{}` | config, snake_case runtime, five built-in presets plus `Custom` with the current effects, each as `{name,effects}`, screen_shapes, hotkeys, exact source or null, confirmation_deadline RFC3339 or null |
+| `sources` | `{}` | windows `{id,hwnd,pid,process_created,title}` and monitors `{id,index,device,bounds,work_area,primary}`, `suggested` (suggested window or null) |
 | `apply` | `{config,source?,expected_emergency_sequence,expected_config?}` | Authoritative snapshot, also on failure |
 | `toggle`, `emergency`, `restore`, `confirm`, `reload` | `{}` | Authoritative snapshot |
 | `preview` | `{config,width,height,time,before}` | `{mime:"image/png",width,height,png_base64}` |

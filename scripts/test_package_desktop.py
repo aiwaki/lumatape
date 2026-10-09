@@ -28,11 +28,12 @@ class DesktopPackageTests(unittest.TestCase):
         self.addCleanup(setattr, package_desktop, 'ROOT', previous)
         for name in ['LICENSE', 'README.md', 'README.en.md', 'START-HERE.txt', 'START-HERE.en.txt', 'assets/lumatape.svg', 'assets/lumatape.ico',
                      'third_party/README.md', 'third_party/README.en.md', 'desktop/src-tauri/README.md', 'desktop/src-tauri/README.en.md', 'desktop/src-tauri/Cargo.lock',
-                     'cmd/lumatape-testcard/README.md', 'cmd/lumatape-testcard/README.en.md', 'internal/control/README.md', 'internal/control/README.en.md', 'internal/display/README.md', 'internal/display/README.en.md', 'internal/pointer/README.md', 'internal/pointer/README.en.md', 'native/capture/README.md', 'native/capture/README.en.md', 'scripts/windows-control-smoke/README.md', 'scripts/windows-control-smoke/README.en.md', 'scripts/windows-ui-smoke/README.md', 'scripts/windows-ui-smoke/README.en.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub',
-                     'desktop/package-lock.json', 'third_party/frontend-provenance.json']:
+                     'cmd/lumatape-testcard/README.md', 'cmd/lumatape-testcard/README.en.md', 'internal/control/README.md', 'internal/control/README.en.md', 'internal/display/README.md', 'internal/display/README.en.md', 'internal/pointer/README.md', 'internal/pointer/README.en.md', 'native/capture/README.md', 'native/capture/README.en.md', 'scripts/windows-control-smoke/README.md', 'scripts/windows-control-smoke/README.en.md', 'scripts/windows-ui-smoke/README.md', 'scripts/windows-ui-smoke/README.en.md', 'desktop/src-tauri/icons/icon.png', 'desktop/src-tauri/updater.pub']:
             self.write(name, b'test notice\n')
         for name in ['README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'WINDOWS_VALIDATION.en.md', 'PARALLELS_SMOKE.md', 'PARALLELS_SMOKE.en.md', 'CURRENT_STATE.md', 'ARCHITECTURE.md', 'ARCHITECTURE.en.md', 'PRIOR_ART_AUDIT.md', 'PRIOR_ART_AUDIT.en.md', 'SHADER_SPEC.md', 'SHADER_SPEC.en.md', 'UPDATES.md', 'UPDATES.en.md']:
             self.write('docs/' + name, b'Unqualified test fixture\n')
+        self.write('docs/images/before-after.jpg', b'\xff\xd8\xffJPEG test fixture\n')
+        self.write('docs/images/signal-strip.svg', b'<svg xmlns="http://www.w3.org/2000/svg"/>\n')
         for name in ['amber-crt.lumatape.glsl', 'cold-bleed.lumatape.glsl']:
             self.write('examples/shaders/' + name, b'Test shader fixture\n')
         pe = bytearray(256)
@@ -53,16 +54,6 @@ class DesktopPackageTests(unittest.TestCase):
                     'cargo_lock_sha256': hashlib.sha256((self.root/'desktop/src-tauri/Cargo.lock').read_bytes()).hexdigest(),
                     'packages': [{'texts': [{'path': 'sample-1.0/LICENSE', 'sha256': hashlib.sha256(text).hexdigest()}]}]}
         self.write('input/licenses/rust/manifest.json', json.dumps(manifest).encode())
-        npm_text = b'Frontend runtime license\n'
-        vendor_text = b'Full shadcn MIT license\n'
-        self.write('input/licenses/npm/packages/react/LICENSE', npm_text)
-        self.write('input/licenses/npm/vendored/shadcn/LICENSE', vendor_text)
-        npm_manifest = {'package_count': 1, 'missing_texts': [],
-                        'package_lock_sha256': hashlib.sha256((self.root/'desktop/package-lock.json').read_bytes()).hexdigest(),
-                        'vendor_manifest_sha256': hashlib.sha256((self.root/'third_party/frontend-provenance.json').read_bytes()).hexdigest(),
-                        'packages': [{'name': 'react', 'texts': [{'path': 'packages/react/LICENSE', 'sha256': hashlib.sha256(npm_text).hexdigest()}]}],
-                        'vendored': [{'name': 'shadcn/ui', 'texts': [{'path': 'vendored/shadcn/LICENSE', 'sha256': hashlib.sha256(vendor_text).hexdigest()}]}]}
-        self.write('input/licenses/npm/manifest.json', json.dumps(npm_manifest).encode())
         self.args = argparse.Namespace(shell=self.shell, engine=self.root/'input/engine',
                                       licenses=self.root/'input/licenses', output=None,
                                       version='0.2.0', revision='test', build_time='unknown')
@@ -128,6 +119,7 @@ class DesktopPackageTests(unittest.TestCase):
         private = b'PRIVATE_LOCAL_CHECKPOINT_SENTINEL'
         self.write('docs/CURRENT_STATE.md', private)
         self.write('docs/local-session.md', private)
+        self.write('docs/images/local-session.png', private)
         self.write('artifacts/session.log', private)
         support = self.root/'installer-support'
         package_desktop.copy_support_files(support, self.args.licenses)
@@ -142,6 +134,10 @@ class DesktopPackageTests(unittest.TestCase):
                 path = Path('docs') / f'{name}{language}.md'
                 self.assertEqual((support/path).read_bytes(), (self.root/path).read_bytes())
         self.assertTrue((support/'licenses/rust/manifest.json').is_file())
+        readme_images = ['docs/images/before-after.jpg', 'docs/images/signal-strip.svg']
+        for path in readme_images:
+            self.assertEqual((support/path).read_bytes(), (self.root/path).read_bytes())
+        self.assertFalse((support/'docs/images/local-session.png').exists())
         self.assertFalse((support/'docs/CURRENT_STATE.md').exists())
         self.assertFalse((support/'docs/local-session.md').exists())
         self.assertFalse((support/'BUILD-STATUS.json').exists())
@@ -149,6 +145,9 @@ class DesktopPackageTests(unittest.TestCase):
         result = self.run_package()
         with zipfile.ZipFile(result['archive']) as archive:
             names = archive.namelist()
+            for path in readme_images:
+                self.assertEqual(archive.read(f'{Path(result["archive"]).stem}/{path}'),
+                                 (self.root/path).read_bytes())
             for name in translated_docs:
                 path = f'docs/{name}.en.md'
                 self.assertEqual(archive.read(f'{Path(result["archive"]).stem}/{path}'),
@@ -230,6 +229,12 @@ class DesktopPackageTests(unittest.TestCase):
         self.assertFalse((folder/'stale.txt').exists())
 
     def test_rust_notices_cannot_be_missing_stale_or_tampered(self):
+        lock = self.root/'desktop/src-tauri/Cargo.lock'
+        original_lock = lock.read_bytes()
+        lock.write_text('changed lock')
+        with self.assertRaisesRegex(ValueError, 'does not match Cargo.lock'):
+            self.run_package()
+        lock.write_bytes(original_lock)
         text = self.root/'input/licenses/rust/sample-1.0/LICENSE'
         text.write_text('tampered')
         with self.assertRaisesRegex(ValueError, 'checksum'):
@@ -238,6 +243,22 @@ class DesktopPackageTests(unittest.TestCase):
         (self.root/'input/licenses/rust/manifest.json').unlink()
         with self.assertRaisesRegex(ValueError, 'Missing Rust'):
             self.run_package()
+
+    def test_all_native_notices_are_required_before_replacing_a_package(self):
+        result = self.run_package()
+        archive = Path(result['archive'])
+        original = archive.read_bytes()
+        for name in package_desktop.NATIVE_NOTICES:
+            with self.subTest(notice=name):
+                path = self.args.licenses/'native'/name
+                data = path.read_bytes()
+                path.unlink()
+                try:
+                    with self.assertRaisesRegex(ValueError, 'Missing native notice:'):
+                        self.run_package()
+                    self.assertEqual(archive.read_bytes(), original)
+                finally:
+                    path.write_bytes(data)
 
     def test_sync_conflict_licenses_do_not_change_archive(self):
         initial = self.run_package()
@@ -259,20 +280,29 @@ class DesktopPackageTests(unittest.TestCase):
             actual = {name[len(prefix):] for name in zipped.namelist() if name.startswith(prefix)}
             expected = {'native/' + name for name in package_desktop.NATIVE_NOTICES}
             expected.update({'rust/manifest.json', 'rust/THIRD-PARTY-NOTICES.txt', 'rust/sample-1.0/LICENSE'})
-            expected.update({'npm/manifest.json', 'npm/THIRD-PARTY-NOTICES.txt', 'npm/packages/react/LICENSE', 'npm/vendored/shadcn/LICENSE'})
             self.assertEqual(actual, expected)
 
-    def test_npm_notices_require_current_lock_and_untampered_full_text(self):
-        (self.root/'desktop/package-lock.json').write_text('changed lock')
-        with self.assertRaisesRegex(ValueError, 'current lock/provenance'):
-            self.run_package()
-        (self.root/'desktop/package-lock.json').write_bytes(b'test notice\n')
-        (self.root/'input/licenses/npm/packages/react/LICENSE').write_text('tampered')
-        with self.assertRaisesRegex(ValueError, 'npm license text checksum'):
-            self.run_package()
-        (self.root/'input/licenses/npm/manifest.json').unlink()
-        with self.assertRaisesRegex(ValueError, 'Missing npm'):
-            self.run_package()
+    def test_tray_package_needs_no_npm_manifest_and_ignores_archived_notices(self):
+        self.assertFalse((self.args.licenses/'npm').exists())
+        self.assertFalse((self.root/'desktop/package-lock.json').exists())
+        self.assertFalse((self.root/'third_party/frontend-provenance.json').exists())
+        result = self.run_package()
+        archive = Path(result['archive'])
+        original = archive.read_bytes()
+        # Even stale or corrupt archive inputs must not enter or gate the tray
+        # distribution. The archived UI collector tests validate those separately.
+        for name in ['manifest.json', 'packages/react/LICENSE', 'vendored/shadcn/LICENSE']:
+            self.write('input/licenses/npm/' + name, b'STALE_NPM_SENTINEL')
+        self.write('desktop/package-lock.json', b'STALE_NPM_SENTINEL')
+        self.write('third_party/frontend-provenance.json', b'STALE_NPM_SENTINEL')
+        self.assertEqual(self.run_package()['sha256'], result['sha256'])
+        self.assertEqual(archive.read_bytes(), original)
+        support = self.root/'installer-support'
+        package_desktop.copy_support_files(support, self.args.licenses)
+        self.assertFalse((support/'licenses/npm').exists())
+        with zipfile.ZipFile(archive) as zipped:
+            self.assertFalse(any('/licenses/npm/' in name for name in zipped.namelist()))
+            self.assertFalse(any(b'STALE_NPM_SENTINEL' in zipped.read(name) for name in zipped.namelist()))
 
 
 if __name__ == '__main__':

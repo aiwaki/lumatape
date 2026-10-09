@@ -35,8 +35,6 @@ try {
   if($LASTEXITCODE -ne 0){throw 'Locked Rust dependency download failed'}
   python desktop/scripts/licenses.py --output "$licenses/rust"
   if($LASTEXITCODE -ne 0){throw 'License collection failed'}
-  python desktop/scripts/npm-licenses.py --output "$licenses/npm"
-  if($LASTEXITCODE -ne 0){throw 'Frontend license collection failed'}
   python scripts/stage-installer.py --licenses $licenses
   if($LASTEXITCODE -ne 0){throw 'Installer notice staging failed'}
   Push-Location desktop

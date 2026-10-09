@@ -32,7 +32,7 @@
         "toggle-group",
         "tooltip"
       ],
-      "note": "Generated from the official registry on 2026-10-06; registry responses are not claimed to be pinned to a Git commit. Copied component source is retained in desktop/ui/components/ui and subsequent local adaptations are documented in desktop/ui/README.md. The release build uses these retained sources and never reruns the registry generator.",
+      "note": "Generated from the official registry on 2026-10-06; registry responses are not claimed to be pinned to a Git commit. Copied component source is retained in desktop/ui/components/ui and subsequent local adaptations are documented in desktop/ui/README.md. Only separate builds of the archived panel use these retained sources; the tray release does not include them. Archive builds do not rerun the registry generator.",
       "texts": [
         {
           "path": "shadcn-LICENSE.txt",
@@ -54,7 +54,7 @@
         "bytes": 532968,
         "modified": false
       },
-      "note": "Unmodified official variable WOFF2, locally bundled; only the filename was shortened. Both upstream LICENSE and OFL.txt copyright/license texts are preserved. Actual cmap has no Cyrillic; missing glyphs use the local CSS fallback font. No CDN runtime dependency.",
+      "note": "Unmodified official variable WOFF2, retained locally for the archived panel and excluded from the tray release; only the filename was shortened. Both upstream LICENSE and OFL.txt copyright/license texts are preserved. Actual cmap has no Cyrillic; missing glyphs use the local CSS fallback font. No CDN runtime dependency.",
       "texts": [
         {
           "path": "MonaSans-LICENSE.txt",

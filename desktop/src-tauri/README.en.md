@@ -265,15 +265,20 @@ collects full available texts from the locked Windows dependency graph using
 offline Cargo metadata. Run it after fetching/building dependencies. Missing
 full texts are errors; an SPDX declaration alone is not a replacement.
 
-The current packaging process also runs
-`python3 desktop/scripts/npm-licenses.py --output build/desktop-licenses/npm`.
-It preserves the locked npm and copied shadcn license notices associated with
-the retained UI source. Their presence does not mean React is loaded by the
-tray host. The collector reads installed dependencies after `npm ci`, performs
-no network request, records integrity/source, and rejects missing texts or
-version mismatches. `node_modules` is not included. Packaging verifies lock and
-provenance hashes and each text checksum, copying only manifest-listed paths
-alongside native notices; sync-conflict `LICENSE 2` copies cannot enter the ZIP.
+Tray packaging does not collect npm notices: React, shadcn and the Mona Sans font
+are used only by the archived panel and are not included in this package.
+`npm ci` remains a build step for the pinned Tauri CLI; `node_modules` is not shipped.
+Rust notices are retained for the entire locked Windows graph, including Wry
+dependencies: creating no WebView window does not remove them from the Cargo graph.
+Packaging verifies the Cargo.lock hash and each license text checksum,
+copying only manifest-listed paths alongside native notices.
+Sync-conflict `LICENSE 2` copies cannot enter the ZIP.
+
+For separate builds of the archived panel, the collector remains available:
+`python3 desktop/scripts/npm-licenses.py --output build/archive-ui-licenses/npm`.
+It reads installed dependencies after `npm ci`, performs no network request,
+records integrity/source, and rejects missing texts or version mismatches.
+CI checks it separately from the tray application build.
 
 Match concrete artifact hashes to the release checksum and package manifest.
 The [Windows protocol](../../docs/WINDOWS_VALIDATION.en.md) separates Windows, GPU,

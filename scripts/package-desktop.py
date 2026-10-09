@@ -143,49 +143,10 @@ def check_rust_licenses(directory):
     return files
 
 
-def check_npm_licenses(directory):
-    npm = directory / 'npm'
-    manifest_path = npm / 'manifest.json'
-    if not manifest_path.is_file():
-        raise ValueError('Missing npm license manifest; run desktop/scripts/npm-licenses.py')
-    manifest_bytes = manifest_path.read_bytes()
-    manifest = json.loads(manifest_bytes.decode('utf-8'))
-    for key, source in (
-        ('package_lock_sha256', ROOT / 'desktop/package-lock.json'),
-        ('vendor_manifest_sha256', ROOT / 'third_party/frontend-provenance.json'),
-    ):
-        if manifest.get(key) != hashlib.sha256(source.read_bytes()).hexdigest():
-            raise ValueError('npm license manifest does not match current lock/provenance')
-    packages, vendored = manifest.get('packages', []), manifest.get('vendored', [])
-    if not packages or manifest.get('package_count') != len(packages) or manifest.get('missing_texts') != []:
-        raise ValueError('npm dependency license collection is incomplete')
-    if not any(p.get('name') == 'shadcn/ui' for p in vendored):
-        raise ValueError('Missing vendored shadcn/ui license provenance')
-    files = {Path('npm/manifest.json'): manifest_bytes}
-    lines = ['LumaTape frontend dependency notices', '']
-    for record in packages + vendored:
-        if not record.get('texts'):
-            raise ValueError('Frontend dependency has no full license text')
-        lines.append(f'{record.get("name", "unknown")} {record.get("version", record.get("revision", ""))}: {record.get("license", "See full text")}')
-        for text in record['texts']:
-            relative = PurePosixPath(text['path'])
-            if relative.is_absolute() or '..' in relative.parts or '\\' in text['path'] or ':' in text['path'] or len(relative.parts) < 3:
-                raise ValueError('Invalid npm license relative path')
-            source = (npm / relative).resolve()
-            if not source.is_relative_to(npm.resolve()) or not source.is_file():
-                raise ValueError('npm license text is outside its directory or missing')
-            data = source.read_bytes()
-            if hashlib.sha256(data).hexdigest() != text['sha256']:
-                raise ValueError('npm license text checksum mismatch')
-            files[Path('npm') / relative] = data
-            lines.append('  ' + text['path'])
-    files[Path('npm/THIRD-PARTY-NOTICES.txt')] = ('\n'.join(lines) + '\n').encode('utf-8')
-    return files
-
-
 def copy_licenses(source, destination):
+    # The native tray does not embed the archived React panel. Its npm notices
+    # remain with that source and are not inputs to the product package.
     files = check_rust_licenses(source)
-    files.update(check_npm_licenses(source))
     for name in NATIVE_NOTICES:
         path = source / 'native' / name
         if not path.is_file():
@@ -208,7 +169,7 @@ def copy_support_files(destination: Path, licenses: Path):
         dest = destination / name
         dest.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / name, dest)
-    for name in ('README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'WINDOWS_VALIDATION.en.md', 'PARALLELS_SMOKE.md', 'PARALLELS_SMOKE.en.md', 'ARCHITECTURE.md', 'ARCHITECTURE.en.md', 'PRIOR_ART_AUDIT.md', 'PRIOR_ART_AUDIT.en.md', 'SHADER_SPEC.md', 'SHADER_SPEC.en.md', 'UPDATES.md', 'UPDATES.en.md'):
+    for name in ('README.md', 'README.en.md', 'shaders/README.md', 'shaders/README.en.md', 'WINDOWS_VALIDATION.md', 'WINDOWS_VALIDATION.en.md', 'PARALLELS_SMOKE.md', 'PARALLELS_SMOKE.en.md', 'ARCHITECTURE.md', 'ARCHITECTURE.en.md', 'PRIOR_ART_AUDIT.md', 'PRIOR_ART_AUDIT.en.md', 'SHADER_SPEC.md', 'SHADER_SPEC.en.md', 'UPDATES.md', 'UPDATES.en.md', 'images/before-after.jpg', 'images/signal-strip.svg'):
         target = destination / 'docs' / name
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(ROOT / 'docs' / name, target)

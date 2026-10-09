@@ -57,7 +57,6 @@ cp "$native"/licenses/* build/desktop-licenses/native/
 (cd desktop && npm ci --ignore-scripts --no-audit --no-fund)
 cargo fetch --manifest-path desktop/src-tauri/Cargo.toml --locked --target x86_64-pc-windows-msvc
 python3 desktop/scripts/licenses.py --output build/desktop-licenses/rust
-python3 desktop/scripts/npm-licenses.py --output build/desktop-licenses/npm
 python3 scripts/stage-installer.py --licenses build/desktop-licenses
 (cd desktop && npm run tauri -- build --runner cargo-xwin --target x86_64-pc-windows-msvc --no-bundle -- --locked)
 python3 scripts/package-desktop.py --shell desktop/src-tauri/target/x86_64-pc-windows-msvc/release/lumatape.exe --engine "$stage" --licenses build/desktop-licenses --version "$version" --revision "$revision" --build-time "$stamp" --output "$output" --update-channel "$update_channel"

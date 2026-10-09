@@ -40,9 +40,10 @@ npx --yes shadcn@4.21.3 add button select slider switch tabs dialog tooltip card
 Registry: <https://ui.shadcn.com/r/styles/new-york-v4/>
 Setup documentation: <https://ui.shadcn.com/docs/installation/vite>
 Upstream source: <https://github.com/shadcn-ui/ui>
-The complete MIT notice is retained in `third-party/shadcn-LICENSE.md` and in the
-distribution's third-party notices. React, Radix, Lucide and the CSS dependencies
-also retain their own notices through the packaging license collector.
+The complete MIT notice is retained in `third-party/shadcn-LICENSE.md`. For a separate
+build of the archived panel, `desktop/scripts/npm-licenses.py` collects notices for
+shadcn, React, Radix, Lucide and the CSS dependencies. The current tray build does
+not include the panel or its notices; their sources and licenses remain in the repository.
 
 Local adaptations to generated components: `cn` imports use `lib/utils.ts`
 (clsx + tailwind-merge), and Slider forwards accessible names to each Radix
@@ -125,11 +126,12 @@ For a deterministic large-library browser check, run `npm run dev:ui` and open
 55 effects, a long Cyrillic name and a visible selection output; it never connects
 to the engine and is not an entry in the release bundle.
 
-Mona Sans VF v2.0.27 is bundled locally in `assets/fonts/mona-sans.woff2`.
+Mona Sans VF v2.0.27 is retained locally in `assets/fonts/mona-sans.woff2` for this panel.
 Its provenance, pinned Git commit, SHA256 and unmodified upstream OFL notices
 are next to the file. Mona Sans has no Cyrillic glyphs: Russian text uses the system
 SF/Segoe font. `third_party/frontend-provenance.json` adds the font to the
-existing distribution license collector. No font service is contacted.
+archived panel's license collector. It is not included in the tray build.
+No font service is contacted.
 
 Local backups preserve earlier design variants and compiled output. They are not
 part of the public repository or release package. Restore them to a separate

@@ -10,8 +10,9 @@ when one is available. Every requested mode is re-enumerated and tested with
 
 ## Starting a session
 
-Build and ship `cmd/lumatape-watchdog` as `lumatape-watchdog.exe` next to the app. The main
-process calls `StartSession`, which waits for a ready handshake over inherited
+Build and ship `cmd/lumatape-watchdog` as `lumatape-watchdog.exe` next to
+`lumatape-engine.exe`, in the Tauri package's `engine/` directory. The engine
+calls `StartSession`, which waits for a ready handshake over inherited
 anonymous pipes. The child captures the complete current `DEVMODEW` including
 returned private driver bytes **before** changing anything. The child applies
 and restores the mode. There is no gap between arming protection and changing

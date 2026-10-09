@@ -26,8 +26,8 @@ stdin/stdout. Сетевого сервера, общей точки подкл�
 
 | Команда | Данные запроса | Результат |
 | --- | --- | --- |
-| `snapshot` | `{}` | config, runtime с именами полей в snake_case, пять пресетов `{name,effects}`, screen_shapes, hotkeys, точный источник или null, confirmation_deadline в RFC3339 или null |
-| `sources` | `{}` | Окна `{id,hwnd,pid,process_created,title}` и мониторы `{id,index,device,bounds,work_area,primary}` |
+| `snapshot` | `{}` | config, runtime с именами полей в snake_case, пять встроенных пресетов и `Custom` с текущими параметрами, каждый в формате `{name,effects}`, screen_shapes, hotkeys, точный источник или null, confirmation_deadline в RFC3339 или null |
+| `sources` | `{}` | Окна `{id,hwnd,pid,process_created,title}` и мониторы `{id,index,device,bounds,work_area,primary}`, `suggested` (предлагаемое окно или null) |
 | `apply` | `{config,source?,expected_emergency_sequence,expected_config?}` | Достоверный снимок состояния, в том числе при ошибке |
 | `toggle`, `emergency`, `restore`, `confirm`, `reload` | `{}` | Достоверный снимок состояния |
 | `preview` | `{config,width,height,time,before}` | `{mime:"image/png",width,height,png_base64}` |
