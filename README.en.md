@@ -11,3 +11,7 @@
 CRT and VHS for games: TV scanlines, a soft glow, and videotape distortion.
 LumaTape overlays effects on a game window and can give the screen rounded
 corners or a curved shape, like a vintage TV.
+
+![Test scene without and with a LumaTape effect](docs/images/before-after.jpg)
+
+Original test scene on the left; with a LumaTape effect on the right.
