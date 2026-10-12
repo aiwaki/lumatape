@@ -9,12 +9,16 @@ import subprocess
 import struct
 import tempfile
 import unittest
+from unittest.mock import patch
 import zipfile
 from pathlib import Path
 
 spec = importlib.util.spec_from_file_location('package_desktop', Path(__file__).with_name('package-desktop.py'))
 package_desktop = importlib.util.module_from_spec(spec)
 spec.loader.exec_module(package_desktop)
+stage_spec = importlib.util.spec_from_file_location('stage_installer', Path(__file__).with_name('stage-installer.py'))
+stage_installer = importlib.util.module_from_spec(stage_spec)
+stage_spec.loader.exec_module(stage_installer)
 
 
 class DesktopPackageTests(unittest.TestCase):
@@ -105,6 +109,10 @@ class DesktopPackageTests(unittest.TestCase):
                     status = json.loads(raw)
                     self.assertEqual(status['update_channel'], channel)
                     self.assertTrue(status['updater'].startswith(channel + ';'))
+                    self.assertIn('required for settings', status['webview2'])
+                    self.assertIn('separately for this portable ZIP', status['webview2'])
+                    self.assertIn('on-demand local settings', status['interface'])
+                    self.assertIn('no settings window at first launch', status['interface'])
                     if channel == 'configured':
                         self.assertIn('checks enabled', status['updater'])
                         self.assertIn('installation disabled for this portable ZIP', status['updater'])
@@ -193,10 +201,40 @@ class DesktopPackageTests(unittest.TestCase):
         archive = self.root/'dist/lumatape-0.2.0-windows-x64.zip'
         previous = archive.read_bytes()
         self.capture_pe(package_desktop.CAPTURE_EXPORTS - {'vhs_capture_open_ex', 'vhs_capture_get_stats'})
-        with self.assertRaisesRegex(ValueError, 'CPU compatibility ABI.*vhs_capture_get_stats.*vhs_capture_open_ex'):
+        with self.assertRaisesRegex(ValueError, 'required package ABI.*vhs_capture_get_stats.*vhs_capture_open_ex'):
             self.run_package()
         self.assertEqual(previous, archive.read_bytes())
         self.assertFalse(list(archive.parent.glob('.desktop-*')))
+
+    def test_native_input_without_idle_health_check_cannot_replace_package(self):
+        original = self.run_package()
+        archive = Path(original['archive'])
+        previous = archive.read_bytes()
+        old_exports = package_desktop.CAPTURE_EXPORTS - {'vhs_capture_can_reuse_idle'}
+        self.capture_pe(old_exports)
+        with self.assertRaisesRegex(ValueError, 'required package ABI.*vhs_capture_can_reuse_idle'):
+            self.run_package()
+        self.assertEqual(previous, archive.read_bytes())
+        self.assertFalse(list(archive.parent.glob('.desktop-*')))
+
+    def test_installer_stage_rejects_old_capture_before_replacing_support(self):
+        support = self.root/'desktop/src-tauri/resources/support'
+        sentinel = self.write('desktop/src-tauri/resources/support/previous.txt', b'keep on failure')
+        engine = 'desktop/src-tauri/resources/engine/lumatape_capture.dll'
+        with patch.object(stage_installer, 'ROOT', self.root), patch.object(stage_installer, 'PACKAGE', package_desktop):
+            old = self.capture_pe(package_desktop.CAPTURE_EXPORTS - {'vhs_capture_can_reuse_idle'})
+            self.write(engine, old.read_bytes())
+            with self.assertRaisesRegex(ValueError, 'vhs_capture_can_reuse_idle'):
+                stage_installer.stage(self.args.licenses)
+            self.assertEqual(sentinel.read_bytes(), b'keep on failure')
+            current = self.capture_pe(package_desktop.CAPTURE_EXPORTS)
+            self.write(engine, current.read_bytes())
+            with contextlib.redirect_stdout(io.StringIO()):
+                stage_installer.stage(self.args.licenses)
+            self.assertFalse(sentinel.exists())
+            self.assertTrue((support/'docs/README.md').is_file())
+            self.assertTrue((support/'licenses/rust/manifest.json').is_file())
+            self.assertFalse(list(support.parent.glob('.support-*')))
 
     def test_malformed_export_table_is_rejected_before_staging(self):
         path = self.capture_pe(package_desktop.CAPTURE_EXPORTS)

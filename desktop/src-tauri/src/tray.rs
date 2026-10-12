@@ -1,4 +1,4 @@
-//! The complete application surface: a Tauri native menu, without a WebView.
+//! Native quick actions and the shared admission boundary for settings commands.
 #[path = "tray_refresh.rs"]
 mod refresh_state;
 
@@ -181,6 +181,7 @@ pub struct Controller {
     emergency_busy: AtomicBool,
     refreshing: AtomicBool,
     dialog_busy: AtomicBool,
+    pub display_change: crate::display_change::DisplayChange,
 }
 impl Controller {
     pub fn new() -> Self {
@@ -195,6 +196,7 @@ impl Controller {
             emergency_busy: AtomicBool::new(false),
             refreshing: AtomicBool::new(false),
             dialog_busy: AtomicBool::new(false),
+            display_change: crate::display_change::DisplayChange::default(),
         }
     }
     pub fn invalidate(&self) {
@@ -205,7 +207,7 @@ impl Controller {
     }
 }
 
-fn cancel_pending_actions(state: &Host) {
+pub(crate) fn cancel_pending_actions(state: &Host) {
     state.tray.cancel_epoch.fetch_add(1, Ordering::AcqRel);
     // 4 keeps update ownership while a cancelled download/cleanup unwinds.
     // 3 is the irreversible installer handoff; it cannot be cancelled here.
@@ -265,10 +267,14 @@ fn build(app: &AppHandle) -> Result<Handles, String> {
         true,
     )?;
     let autostart = CheckMenuItem::with_id(
-        app, "autostart",
+        app,
+        "autostart",
         crate::i18n::text("Запускать при входе в Windows", "Start with Windows"),
-        true, false, None::<&str>,
-    ).map_err(|e| e.to_string())?;
+        true,
+        false,
+        None::<&str>,
+    )
+    .map_err(|e| e.to_string())?;
     service
         .append_items(&[
             &autostart,
@@ -318,7 +324,12 @@ fn build(app: &AppHandle) -> Result<Handles, String> {
             &effects.menu,
             &import,
             &sep()?,
-            &settings,
+            &item(
+                app,
+                "settings-window",
+                crate::i18n::text("Настройки…", "Settings…"),
+                true,
+            )?,
             &service,
             &sep()?,
             &item(
@@ -552,7 +563,9 @@ async fn read_data(app: &AppHandle) -> Result<Data, String> {
 fn autostart_event(app: &AppHandle) {
     let target = app.clone();
     let _ = app.run_on_main_thread(move || {
-        let Some(state) = target.try_state::<Host>() else { return; };
+        let Some(state) = target.try_state::<Host>() else {
+            return;
+        };
         // Read at application time so a queued refresh cannot overwrite a toggle.
         let status = state.autostart.status(&target);
         if let Some(handles) = state.tray.handles.lock().unwrap().as_ref() {
@@ -560,7 +573,7 @@ fn autostart_event(app: &AppHandle) {
             // Unavailable copies retain a clickable explanation; no writes occur.
             let _ = handles.autostart.set_enabled(
                 state.terminal.load(Ordering::Acquire) == 0
-                    && !state.tray.busy.load(Ordering::Acquire)
+                    && !state.tray.busy.load(Ordering::Acquire),
             );
         };
     });
@@ -793,7 +806,12 @@ pub fn show_existing(app: &AppHandle) {
     #[cfg(not(windows))]
     let available = icon.is_some();
     if available {
-        notify(app,crate::i18n::text("LumaTape уже работает. Нажмите на значок в области уведомлений — все команды находятся в его меню.", "LumaTape is already running. Click its tray icon to access all commands.").into(),false);
+        let target = app.clone();
+        tauri::async_runtime::spawn(async move {
+            if let Err(error) = crate::settings::open(&target).await {
+                report_error(&target, "LumaTape", &error);
+            }
+        });
     } else if let Some(state) = app.try_state::<Host>() {
         if state.tray.busy.swap(true, Ordering::AcqRel) {
             return;
@@ -836,75 +854,153 @@ fn check_intent(
     }
 }
 fn dispatch(app: &AppHandle, id: &str) {
-    let state = app.state::<Host>();
-    let epoch = state.tray.cancel_epoch.load(Ordering::Acquire);
-    let cached = state.tray.data.lock().unwrap().clone();
-    let sequence = cached.as_ref().map(|d| d.model.emergency_sequence);
-    let off = id == "model:power"
-        && (state.tray.busy.load(Ordering::Acquire)
-            || cached.as_ref().is_none_or(|d| d.model.wants_off));
-    if off || id == "quit" {
-        cancel_pending_actions(&state);
-        if off && state.tray.emergency_busy.swap(true, Ordering::AcqRel) {
-            return;
-        }
-        let quit = id == "quit";
-        let app = app.clone();
+    if id == "settings-window" {
+        let target = app.clone();
         tauri::async_runtime::spawn(async move {
-            let result = if quit {
-                crate::quit_host(&app).await
-            } else {
-                engine_call(&app, "emergency", Value::Null)
-                    .await
-                    .map(|_| ())
-            };
-            app.state::<Host>()
-                .tray
-                .emergency_busy
-                .store(false, Ordering::Release);
-            if let Err(error) = result {
-                report_error(
-                    &app,
-                    crate::i18n::text(
-                        "Не удалось завершить действие",
-                        "Could not complete the action",
-                    ),
-                    &error,
-                )
-            }
-            if !quit {
-                refresh(&app).await;
+            if let Err(error) = crate::settings::open(&target).await {
+                report_error(&target, "LumaTape", &error);
             }
         });
         return;
     }
-    if state.tray.busy.swap(true, Ordering::AcqRel) {
-        return;
+    // Capture the click before spawning: a delayed task must not acquire a
+    // newer intent after emergency cancellation.
+    let state = app.state::<Host>();
+    let epoch = state.tray.cancel_epoch.load(Ordering::Acquire);
+    let sequence = state
+        .tray
+        .data
+        .lock()
+        .unwrap()
+        .as_ref()
+        .map(|data| data.model.emergency_sequence);
+    let app = app.clone();
+    let id = id.to_owned();
+    tauri::async_runtime::spawn(async move {
+        if let Err(error) = execute(&app, &id, sequence, None, Some(epoch)).await {
+            report_error(
+                &app,
+                crate::i18n::text("Действие не выполнено", "Action failed"),
+                &error,
+            );
+        }
+    });
+}
+
+// Native menu and bundled settings use the same lock, cancel epoch and CAS.
+// Off deliberately bypasses ordinary admission, including when the model failed.
+pub async fn execute(
+    app: &AppHandle,
+    id: &str,
+    sequence: Option<u64>,
+    confirmation_token: Option<&str>,
+    intent_epoch: Option<u64>,
+) -> Result<(), String> {
+    let state = app.state::<Host>();
+    let epoch = intent_epoch.unwrap_or_else(|| state.tray.cancel_epoch.load(Ordering::Acquire));
+    let cached = state.tray.data.lock().unwrap().clone();
+    let sequence = sequence.or_else(|| cached.as_ref().map(|d| d.model.emergency_sequence));
+    let off = id == "model:off"
+        || id == "model:power"
+            && (state.tray.busy.load(Ordering::Acquire)
+                || cached.as_ref().is_none_or(|d| d.model.wants_off));
+    if off || id == "quit" {
+        cancel_pending_actions(&state);
+        if off && state.tray.emergency_busy.swap(true, Ordering::AcqRel) {
+            return Err(crate::i18n::text(
+                "Отключение уже выполняется.",
+                "Turning off is already in progress.",
+            )
+            .into());
+        }
+        let display_ticket = state.tray.display_change.ticket();
+        let result = if id == "quit" {
+            crate::quit_host(app).await
+        } else {
+            engine_call(app, "emergency", Value::Null).await.map(|_| ())
+        };
+        state.tray.emergency_busy.store(false, Ordering::Release);
+        if result.is_ok() {
+            state.tray.display_change.clear(display_ticket);
+        }
+        if id != "quit" {
+            refresh(app).await;
+        }
+        return result;
     }
-    // Make a pending enable cancellable immediately, before the next snapshot.
+    if state.terminal.load(Ordering::Acquire) != 0 {
+        return Err(crate::i18n::text(
+            "LumaTape закрывается или обновляется.",
+            "LumaTape is closing or updating.",
+        )
+        .into());
+    }
+    if epoch != state.tray.cancel_epoch.load(Ordering::Acquire) {
+        return Err(cancelled().into());
+    }
+    if state.tray.busy.swap(true, Ordering::AcqRel) {
+        return Err(crate::i18n::text(
+            "Дождитесь завершения предыдущего действия.",
+            "Wait for the previous action to finish.",
+        )
+        .into());
+    }
+    // Check after acquiring the shared slot: another display action may have
+    // completed between our first state read and admission. This includes
+    // preparation before the UI has received a confirmation snapshot. Off/quit
+    // already crossed the emergency path above.
+    if state.tray.display_change.pending() && !crate::display_change::allowed_while_pending(id) {
+        state.tray.busy.store(false, Ordering::Release);
+        return Err(crate::i18n::text(
+            "Сначала оставьте новое разрешение или верните прежнее.",
+            "Keep the new resolution or revert it first.",
+        )
+        .into());
+    }
     if let Some(h) = state.tray.handles.lock().unwrap().as_ref() {
         let _ = h.power.set_text(crate::i18n::text("Выключить", "Turn off"));
         let _ = h.power.set_enabled(true);
         let _ = h.confirm.set_enabled(false);
     }
-    let id = id.to_owned();
-    let app = app.clone();
-    tauri::async_runtime::spawn(async move {
-        let result = perform(&app, &id, epoch, sequence).await;
-        app.state::<Host>()
-            .tray
-            .busy
-            .store(false, Ordering::Release);
-        if let Err(error) = result {
-            report_error(
-                &app,
-                crate::i18n::text("Действие не выполнено", "Action failed"),
-                &error,
-            )
-        }
-        refresh(&app).await;
-    });
+    let display_ticket = state.tray.display_change.ticket();
+    let result = perform(app, id, epoch, sequence, confirmation_token).await;
+    if result.is_ok() && matches!(id, "confirm" | "model:format:off") {
+        state.tray.display_change.clear(display_ticket);
+    }
+    state.tray.busy.store(false, Ordering::Release);
+    refresh(app).await;
+    result.map_err(|error| friendly_error(&error))
 }
+
+pub async fn settings_data(app: &AppHandle, catalogues: bool) -> Result<Value, String> {
+    let state = app.state::<Host>();
+    let display_ticket = state.tray.display_change.ticket();
+    let preparing = state.tray.busy.load(Ordering::Acquire);
+    let epoch = state.tray.cancel_epoch.load(Ordering::Acquire);
+    let cached = state.tray.data.lock().unwrap().clone();
+    let data = if let Some(cached) = cached.filter(|_| !catalogues) {
+        let snapshot = engine_call(app, "snapshot", Value::Null).await?;
+        let model = tray_model::build(&snapshot, &cached.sources, &cached.shaders)?;
+        Data {
+            snapshot,
+            model,
+            ..cached
+        }
+    } else {
+        read_data(app).await?
+    };
+    if !data.model.confirmation_pending && !preparing && !state.tray.busy.load(Ordering::Acquire) {
+        state.tray.display_change.clear(display_ticket);
+    }
+    let autostart = state.autostart.status(app);
+    Ok(
+        json!({"language":crate::i18n::language().code(), "version":env!("CARGO_PKG_VERSION"),
+        "model":data.model, "snapshot":data.snapshot, "intent_epoch":epoch,
+        "busy":state.tray.busy.load(Ordering::Acquire), "updates":state.updates.status(),
+        "autostart":{"enabled":autostart.enabled,"can_toggle":autostart.can_toggle,"reason":autostart.reason}}),
+    )
+}
+
 async fn confirm(message: String) -> Result<bool, String> {
     tauri::async_runtime::spawn_blocking(move || native_dialog::confirm("LumaTape", &message))
         .await
@@ -925,12 +1021,23 @@ async fn perform(
     id: &str,
     epoch: u64,
     sequence: Option<u64>,
+    confirmation_token: Option<&str>,
 ) -> Result<(), String> {
     if let Some(action) = tray_model::parse_action(id) {
+        let system = matches!(&action, Action::Format(method) if method == "system");
+        // Arm cancellation before any await. Closing the settings window during
+        // preparation must prevent a later display switch without confirmation.
+        if system {
+            app.state::<Host>().tray.display_change.begin();
+        }
         let initial = read_data(app).await?;
         check_intent(app, epoch, sequence, &initial)?;
         let sequence = Some(initial.model.emergency_sequence);
-        if matches!(&action,Action::Format(method) if method=="system")&&!confirm(crate::i18n::text("Windows временно сменит видеорежим. В течение 15 секунд выберите «Подтвердить видеорежим» в меню трея; без подтверждения вернётся прежний режим. Продолжить?", "Windows will temporarily change the display mode. Choose “Keep display mode” in the tray menu within 15 seconds, or the previous mode will be restored. Continue?").into()).await?{return Ok(())}
+        if system {
+            // Build and show before changing display geometry. No countdown is
+            // ever hidden in a menu the user has to find after the switch.
+            crate::settings::open(app).await?;
+        }
         let data = read_data(app).await?;
         check_intent(app, epoch, sequence, &data)?;
         if action == Action::Power && data.model.wants_off {
@@ -941,13 +1048,23 @@ async fn perform(
             .into());
         }
         let mutation = tray_model::plan(&action, &data.snapshot, &data.sources, &data.shaders)?;
-        engine_call(app, mutation.kind, mutation.payload).await?;
+        let result = engine_call(app, mutation.kind, mutation.payload).await;
+        result?;
         return Ok(());
     }
     match id {
         "confirm" => {
             let data = read_data(app).await?;
             check_intent(app, epoch, sequence, &data)?;
+            if confirmation_token
+                .is_some_and(|token| data.snapshot["confirmation_deadline"].as_str() != Some(token))
+            {
+                return Err(crate::i18n::text(
+                    "Видеорежим уже изменился. Обновите состояние.",
+                    "The display mode changed. Refresh the state.",
+                )
+                .into());
+            }
             engine_call(app, "confirm", Value::Null).await?;
         }
         "import" => import(app, epoch, sequence).await?,
@@ -1034,10 +1151,13 @@ async fn perform(
                     return Err(crate::i18n::text(
                         "LumaTape закрывается или обновляется.",
                         "LumaTape is closing or updating.",
-                    ).into());
+                    )
+                    .into());
                 }
                 state.autostart.toggle(&target, &state.terminal).map(|_| ())
-            }).await.map_err(|error| error.to_string())??;
+            })
+            .await
+            .map_err(|error| error.to_string())??;
         }
         "about" | "effects-folder" => {
             let target = app.clone();
@@ -1047,11 +1167,17 @@ async fn perform(
                     return Err(crate::i18n::text(
                         "LumaTape закрывается или обновляется.",
                         "LumaTape is closing or updating.",
-                    ).into());
+                    )
+                    .into());
                 }
-                if folder { crate::links::open_effects_folder(&target) }
-                else { crate::links::open_repository(&target) }
-            }).await.map_err(|error| error.to_string())??;
+                if folder {
+                    crate::links::open_effects_folder(&target)
+                } else {
+                    crate::links::open_repository(&target)
+                }
+            })
+            .await
+            .map_err(|error| error.to_string())??;
         }
         _ => {
             return Err(

@@ -458,7 +458,7 @@ func (d *nativeDriver) buffer(w, h int) error {
 		return nil
 	}
 	d.freeBuffer()
-	if w < 1 || h < 1 || w > 512 || h > 512 {
+	if w < 1 || h < 1 || w > 514 || h > 514 {
 		return errors.New("unsupported system cursor dimensions")
 	}
 	d.dc = gc("CreateCompatibleDC", 0)
@@ -515,6 +515,13 @@ func (d *nativeDriver) prepareCursor(hcursor uintptr, p geometry.PointerPoint) e
 	if info.Color == 0 {
 		h /= 2
 	}
+	if w < 1 || h < 1 || w > 512 || h > 512 {
+		return errors.New("unsupported system cursor dimensions")
+	}
+	iconW, iconH := w, h
+	// One transparent pixel around the native image leaves room for the XOR
+	// fallback's outline, including cursors whose shape touches a bitmap edge.
+	w, h = w+2, h+2
 	if err := d.buffer(w, h); err != nil {
 		return err
 	}
@@ -531,15 +538,15 @@ func (d *nativeDriver) prepareCursor(hcursor uintptr, p geometry.PointerPoint) e
 		d.pixels[half+i+2] = 255
 		d.pixels[half+i+3] = 255
 	}
-	if uc("DrawIconEx", d.dc, 0, 0, copy, uintptr(w), uintptr(h), 0, 0, 3) == 0 || uc("DrawIconEx", d.dc, 0, uintptr(h), copy, uintptr(w), uintptr(h), 0, 0, 3) == 0 {
+	if uc("DrawIconEx", d.dc, 1, 1, copy, uintptr(iconW), uintptr(iconH), 0, 0, 3) == 0 || uc("DrawIconEx", d.dc, 1, uintptr(h+1), copy, uintptr(iconW), uintptr(iconH), 0, 0, 3) == 0 {
 		return errors.New("draw system cursor")
 	}
 	gc("GdiFlush")
-	if err := composeCursorAlpha(d.pixels[:half], d.pixels[half:]); err != nil {
+	if err := composeCursorAlpha(d.pixels[:half], d.pixels[half:], w); err != nil {
 		return err
 	}
 
-	dest := point{int32(math.Round(p.X)) - int32(info.HotX), int32(math.Round(p.Y)) - int32(info.HotY)}
+	dest := point{int32(math.Round(p.X)) - int32(info.HotX) - 1, int32(math.Round(p.Y)) - int32(info.HotY) - 1}
 	dimensions := size{int32(w), int32(h)}
 	origin := point{}
 	blending := blend{Alpha: 255, Format: 1}

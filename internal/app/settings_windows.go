@@ -325,6 +325,9 @@ func (a *application) readSettings() (config.Config, *win32.Window, error) {
 func (a *application) settingsDiagnostic() string {
 	status := a.RuntimeStatus()
 	data := map[string]any{"build": diagnostics.BuildInfo(), "runtime": status, "config": map[string]any{"mode": a.cfg.Mode, "transfer": a.cfg.Capture.Transfer, "preset": a.cfg.Preset, "screen": a.cfg.Screen, "aspect": a.cfg.Aspect, "input": a.cfg.InputMode, "enabled": a.cfg.Enabled, "intensity": a.cfg.Effects.Intensity}, "hotkeys": map[string]any{"registered": a.tray.HotkeysRegistered(), "toggle_received": a.tray.LastToggle, "emergency_received": a.tray.LastEmergency}, "metrics": map[string]any{"cpu_submission_ms": a.cpuMS, "frame_age_ms": a.ageMS, "transfer": a.transferStats, "transfer_valid": a.transferMetricsValid, "rendered_frames": a.frameCount}}
+	if a.lastPointerFailure != "" {
+		data["pointer_failure"] = map[string]any{"time": a.lastPointerFailureAt, "message": a.lastPointerFailure}
+	}
 	data["gl"] = a.renderer.DriverInfo()
 	data["environment"] = win32.Environment()
 	if a.log != nil {
@@ -454,7 +457,7 @@ func (a *application) updateSettings() {
 	if a.settingsDirty {
 		pending = locale.Text("\r\nЕсть неприменённые настройки.", "\r\nThere are unapplied settings.")
 	}
-	phase := map[string]string{"active": locale.Text("работает", "active"), "ready": locale.Text("готов", "ready"), "disabled": locale.Text("выключен", "disabled"), "bypass": locale.Text("интенсивность 0%", "intensity 0%"), "paused-focus": locale.Text("источник неактивен", "source inactive"), "paused-moving": locale.Text("пауза при движении", "paused while moving"), "waiting-frame": locale.Text("ожидание свежего кадра", "waiting for a fresh frame"), "source-closed": locale.Text("источник закрыт", "source closed"), "waiting-source": locale.Text("источник не выбран", "no source selected"), "paused-stale": locale.Text("ожидание свежего кадра", "waiting for a fresh frame"), "error": locale.Text("ошибка", "error"), "recovery-error": locale.Text("ошибка восстановления", "recovery error")}[status.Phase]
+	phase := map[string]string{"active": locale.Text("работает", "active"), "ready": locale.Text("готов", "ready"), "disabled": locale.Text("выключен", "disabled"), "bypass": locale.Text("интенсивность 0%", "intensity 0%"), "paused-focus": locale.Text("источник неактивен", "source inactive"), "paused-moving": locale.Text("пауза при движении", "paused while moving"), "paused-offscreen": locale.Text("верните окно на экран", "move the window fully on screen"), "waiting-frame": locale.Text("ожидание свежего кадра", "waiting for a fresh frame"), "source-closed": locale.Text("источник закрыт", "source closed"), "waiting-source": locale.Text("источник не выбран", "no source selected"), "paused-stale": locale.Text("ожидание свежего кадра", "waiting for a fresh frame"), "error": locale.Text("ошибка", "error"), "recovery-error": locale.Text("ошибка восстановления", "recovery error")}[status.Phase]
 	if phase == "" {
 		phase = status.Phase
 	}

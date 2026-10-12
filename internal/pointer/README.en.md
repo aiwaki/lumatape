@@ -52,10 +52,12 @@ There is no idle timeout or edge strip that hides a stationary game cursor.
 ## Rendering and limits
 
 The cursor window is click-through, does not activate and is excluded from
-capture. Current HCURSOR dimensions and hotspot are preserved; color alpha and
+capture. The HCURSOR shape and hotspot are preserved; color alpha and
 ordinary monochrome masks are reconstructed from native black/white renders.
-XOR-inverting cursor pixels have no standard alpha representation and fail
-explicitly. Animated cursor frame timing is not currently reproduced. Hidden or
+XOR-inverting cursor pixels have no standard alpha representation. They are
+drawn in white with a one-pixel black outline instead, keeping text cursors
+visible on light and dark backgrounds without moving their hotspot or stopping
+the effect. Animated cursor frame timing is not currently reproduced. Hidden or
 touch-suppressed system cursors are not drawn; in-game software cursors remain
 part of the captured image. There are no hooks, input injection or pointer warps.
 When crop or the screen shape excludes the source pixel under the real cursor,

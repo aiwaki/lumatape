@@ -33,3 +33,29 @@ func TestApplyPayloadPreservesOptionalPreconditionAndWindowIdentity(t *testing.T
 		t.Fatalf("source roundtrip failed: %v", err)
 	}
 }
+
+func TestWindowFormatRetryPayloadIsExplicitAndStrict(t *testing.T) {
+	for _, input := range []string{
+		`{"config":{},"reapply_window_format":true}`,
+		`{"config":{},"reapply_window_format":false}`,
+		`{"config":{}}`,
+	} {
+		var p ApplyPayload
+		if err := DecodePayload([]byte(input), &p); err != nil {
+			t.Fatal(err)
+		}
+		if p.ReapplyWindowFormat != (input == `{"config":{},"reapply_window_format":true}`) {
+			t.Fatal("ordinary apply became an explicit window retry")
+		}
+	}
+	for _, invalid := range []string{
+		`{"config":{},"reapply_window_format":"true"}`,
+		`{"config":{},"reapply_window_format":1}`,
+		`{"config":{},"reapply_system_format":true}`,
+	} {
+		var p ApplyPayload
+		if err := DecodePayload([]byte(invalid), &p); err == nil {
+			t.Fatalf("accepted malformed retry payload: %s", invalid)
+		}
+	}
+}

@@ -24,13 +24,22 @@ type persistentWindowMutation interface {
 }
 
 type windowTransaction struct {
-	driver       windowMutation
-	restore      func() error
-	applied      geometry.Rect
-	original     geometry.Rect
-	verified     bool
-	recoveryOnly bool
-	active       bool
+	driver         windowMutation
+	restore        func() error
+	applied        geometry.Rect
+	appliedClient  geometry.Rect
+	original       geometry.Rect
+	verified       bool
+	clientVerified bool
+	recoveryOnly   bool
+	active         bool
+}
+
+// formatActive reports actual proportions, independently of saved intent.
+// Moving a 4:3 window does not undo its aspect, but any wider/narrower resize
+// does. This observer never resizes the game to enforce an earlier choice.
+func (t *windowTransaction) formatActive(client geometry.Rect) bool {
+	return t != nil && t.active && t.verified && !t.recoveryOnly && client.Validate() == nil && client.W*3 == client.H*4
 }
 
 func beginWindowTransaction(driver windowMutation, client geometry.Rect) (*windowTransaction, error) {
@@ -88,6 +97,7 @@ func beginWindowTransaction(driver windowMutation, client geometry.Rect) (*windo
 	if actual != client {
 		return fail(fmt.Errorf(locale.Text("окно не приняло клиентскую область 4:3; выберите оконный/borderless режим или задайте 4:3 в игре", "the window did not accept the requested 4:3 client; choose windowed/borderless mode or set 4:3 in the game")))
 	}
+	t.appliedClient, t.clientVerified = actual, true
 	if durable, ok := driver.(persistentWindowMutation); ok {
 		if err := durable.Commit(); err != nil {
 			return fail(fmt.Errorf(locale.Text("сохранение владельца восстановления окна: %w", "commit window recovery ownership: %w"), err))
@@ -124,6 +134,18 @@ func (t *windowTransaction) Restore() error {
 		}
 		if current != t.applied {
 			return t.finish() // the user/game changed it; never overwrite that change
+		}
+		if t.clientVerified {
+			client, err := t.driver.ClientBounds()
+			if err != nil {
+				return fmt.Errorf(locale.Text("проверка клиентской области перед восстановлением: %w", "check client area before restoration: %w"), err)
+			}
+			if client != t.appliedClient {
+				if t.recoveryOnly {
+					return errors.New(locale.Text("клиентская область изменилась во время незавершённого восстановления; восстановите окно вручную", "the client area changed during incomplete recovery; restore the window manually"))
+				}
+				return t.finish() // changed decorations/client also release ownership
+			}
 		}
 	}
 	if err := t.restore(); err != nil {

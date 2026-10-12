@@ -56,6 +56,27 @@ Full capture visibility, mouse alignment, native GPU support, and physical displ
 mode restoration require their separate Windows tests. These cases temporarily
 resizes the chosen test card and restores it through the engine's cleanup path.
 
+## Capture rate and idle source
+
+`capture-health.ps1` starts its own testcard with `--capture-smoke`, then runs
+`--case capture-health` against that exact PID, executable and creation time.
+Use absolute paths for `-Engine`, `-Testcard`, `-Helper` and a new
+`-OutputDirectory`. Run it from the interactive Windows session with no other
+LumaTape process. DLLs belong beside the engine. It uses a private profile.
+
+The case measures 15 seconds of animation and six seconds with the source timer
+stopped, then checks filter off/on and source closure. It selects explicit Full
+CPU and a flat screen, leaves geometry unchanged, and saves no PNGs. Samples
+record current presentation FPS separately from newly presented capture frames,
+plus focus, visibility and intervening state events. There is no minimum FPS
+assertion: the 30 FPS cap does not promise 30 actual frames per second.
+
+Some Windows versions keep sending identical WGC frames for a static window.
+`idle_reuse_exercised=false` means that run did not prove the idle reuse branch;
+it is not a failure by itself. The measurements qualify only this testcard and
+backend, not physical GPU performance or every screen refresh. The helper never
+injects held input or closes a window whose fixture identity changed.
+
 ## Input and hotkeys
 
 The `input` case invokes the separately built

@@ -27,6 +27,8 @@ jobs:
           python3 desktop/scripts/npm-licenses.py --output build/archive-ui-licenses/npm
       - name: Archived prototype state and IPC contract tests
         run: npm --prefix desktop run test:ui
+      - name: Settings state and confirmation tests
+        run: npm --prefix desktop run test:settings
       - name: Packaging, signed update admission and dependency license tests
         run: |
           python3 -m unittest discover -s scripts -p 'test_package_desktop.py'

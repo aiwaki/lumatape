@@ -30,6 +30,9 @@ func (b *emergencyBarrier) checkApply(p control.ApplyPayload, current config.Con
 		return &control.Failure{Code: "stale_emergency_sequence", Message: err.Error()}
 	}
 	if len(p.ExpectedConfig) == 0 {
+		if p.ReapplyWindowFormat {
+			return &control.Failure{Code: "invalid_payload", Message: locale.Text("повторное изменение окна требует актуального expected_config", "retrying a window resize requires the current expected_config")}
+		}
 		return nil // Existing clients did not provide a config precondition.
 	}
 	expected, err := config.Decode(p.ExpectedConfig)

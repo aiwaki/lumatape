@@ -225,7 +225,7 @@ func (a *application) executeControl(r control.Request) {
 			}
 			selected = []win32.Window{w}
 		}
-		a.controlMutationReply(r.ID, a.ApplyDraft(next, selected...))
+		a.controlMutationReply(r.ID, a.applyPreferences(next, true, true, selected, p.ReapplyWindowFormat))
 	case "shaders", "shader_import", "shader_source":
 		a.controlShaders(r)
 	case "preview":

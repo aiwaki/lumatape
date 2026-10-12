@@ -26,7 +26,7 @@ the engine stops and requests cleanup.
 | --- | --- | --- |
 | `snapshot` | `{}` | config, snake_case runtime, five built-in presets plus `Custom` with the current effects, each as `{name,effects}`, screen_shapes, hotkeys, exact source or null, confirmation_deadline RFC3339 or null |
 | `sources` | `{}` | windows `{id,hwnd,pid,process_created,title}` and monitors `{id,index,device,bounds,work_area,primary}`, `suggested` (suggested window or null) |
-| `apply` | `{config,source?,expected_emergency_sequence,expected_config?}` | Authoritative snapshot, also on failure |
+| `apply` | `{config,source?,expected_emergency_sequence,expected_config?,reapply_window_format?}` | Authoritative snapshot, also on failure |
 | `toggle`, `emergency`, `restore`, `confirm`, `reload` | `{}` | Authoritative snapshot |
 | `preview` | `{config,width,height,time,before}` | `{mime:"image/png",width,height,png_base64}` |
 | `ui_state` | `{hwnd,visible}` | `{accepted:true}` after verifying host PID |
@@ -41,6 +41,19 @@ engine re-enumerates it, checks HWND/PID/creation identity, and uses its current
 title. Controller windows cannot be selected. Rectangles use
 `{x,y,width,height}` in physical pixels. A focused host window pauses the
 overlay; the engine does not activate a game or settings window itself.
+
+`runtime.source_client` contains the selected game's current client rectangle
+in the same format; it is omitted when unavailable. `format_active` reports
+the actual result. If the game returns to wide proportions after resizing,
+it becomes false and `format_reason` explains how to retry. Window and system
+methods do not add a software 4:3 mask over the changed source.
+
+Only an explicit Window 4:3 action sends `reapply_window_format:true`.
+It requires a selected window, `aspect.enabled:true`, `aspect.method:"window"`,
+and both `expected_config` and `expected_emergency_sequence` preconditions.
+Selecting an already active window format does not change its geometry.
+If the game changed its size, the action starts a new transaction; there is
+no automatic retry. Other preference changes omit this flag.
 
 Preview invokes the same shader renderer on the locked initial GL thread.
 It enables a copy of the draft and sets only that copy's intensity to zero for

@@ -98,6 +98,12 @@ VHS_API int32_t VHS_CALL vhs_capture_get_stats(VhsCapture* capture,
     VhsCaptureStats* stats, char* error, uint32_t error_capacity);
 VHS_API int32_t VHS_CALL vhs_capture_get_telemetry_v1(VhsCapture* capture,
     VhsCaptureTelemetryV1* telemetry, char* error, uint32_t error_capacity);
+// Optional idle-reuse health check during a successful acquire, before release.
+// 1: valid same-geometry texture, live source/device, no pending CPU copy;
+// 0: reuse is not validated; -1: API/device error, stop presenting.
+// Empty WGC pools are normal for unchanged content (not a liveness guarantee).
+VHS_API int32_t VHS_CALL vhs_capture_can_reuse_idle(VhsCapture* capture,
+    char* error, uint32_t error_capacity);
 // 1: GL owns the texture, release REQUIRED after drawing; 0: nothing suitable
 // yet (startup/resize/minimized); -1: stop presenting and report error.
 // The cropped texture's top row is v=0 (D3D convention). It is BGRA UNORM SDR,

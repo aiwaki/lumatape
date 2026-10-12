@@ -13,6 +13,9 @@ SPEC.loader.exec_module(PACKAGE)
 
 
 def stage(licenses):
+    # NSIS embeds these resources independently of portable packaging. Refuse
+    # an old capture DLL before replacing support or building an installer.
+    PACKAGE.check_capture_abi(ROOT / 'desktop/src-tauri/resources/engine/lumatape_capture.dll')
     output = ROOT / 'desktop/src-tauri/resources/support'
     output.parent.mkdir(parents=True, exist_ok=True)
     with tempfile.TemporaryDirectory(prefix='.support-', dir=output.parent) as temporary:

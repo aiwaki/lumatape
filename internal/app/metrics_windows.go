@@ -23,7 +23,7 @@ func (a *application) observeFrameMetrics(now time.Time, frame capture.Frame, fu
 		a.gpuObservedAt = now
 		a.lastGPUSequence = a.renderer.GPUTimeSequence
 	}
-	sample := FrameMetricSample{CPUSubmitMS: a.cpuMS, CPUWorkMS: a.cpuWorkMS, GPUShaderMS: a.renderer.GPUTimeMS, GPUFresh: freshGPU, TransferMS: -1, FrameAgeMS: -1, PresentIntervalMS: -1}
+	sample := FrameMetricSample{CPUSubmitMS: a.cpuMS, CPUWorkMS: a.cpuWorkMS, GPUShaderMS: a.renderer.GPUTimeMS, GPUFresh: freshGPU, TransferMS: -1, FrameAgeMS: -1, PresentIntervalMS: -1, CaptureAvailable: full}
 	if full && frame.Updated != 0 {
 		sample.CaptureFresh, sample.FrameAgeMS = true, a.ageMS
 		if compatibilityCapture(a.resolvedConfig()) && a.transferMetricsValid {
@@ -42,6 +42,6 @@ func (a *application) observeFrameMetrics(now time.Time, frame capture.Frame, fu
 	}
 	if a.metricSummaryAt.IsZero() || now.Sub(a.metricSummaryAt) >= 10*time.Second {
 		a.metricSummary, a.metricSummaryAt = a.metrics.Snapshot(), now
-		a.record("performance_summary", map[string]any{"mode": a.cfg.Mode, "transfer": a.resolvedConfig().Capture.Transfer, "requested_transfer": a.cfg.Capture.Transfer, "shader_id": a.cfg.Shader.ID, "preset": a.cfg.Preset, "size": a.metricSize, "summary": a.metricSummary, "snapshot_frame_excluded": snapshot})
+		a.record("performance_summary", map[string]any{"mode": a.cfg.Mode, "transfer": a.resolvedConfig().Capture.Transfer, "requested_transfer": a.cfg.Capture.Transfer, "shader_id": a.cfg.Shader.ID, "preset": a.cfg.Preset, "size": a.metricSize, "summary": a.metricSummary, "frame_rates": a.metrics.FrameRates(now, true), "snapshot_frame_excluded": snapshot})
 	}
 }

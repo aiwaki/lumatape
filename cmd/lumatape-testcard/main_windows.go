@@ -103,6 +103,8 @@ type cardState struct {
 	pointer                    pointerState
 	fullscreen                 fullscreenState
 	fullscreenButton           uintptr
+	captureSmoke               bool
+	animationPaused            bool
 	err                        error
 }
 
@@ -121,14 +123,15 @@ func main() {
 	colorField := flag.Bool("color-field", false, "show static midtones for comparing VHS noise and color bleed")
 	pointerTest := flag.Bool("pointer-test", false, "native corner/center targets with hover, click, capture, drag and wheel observations")
 	fullscreen := flag.Bool("fullscreen", false, "start borderless on the current monitor; F11 / Alt+Enter toggle, Escape returns to window")
+	captureSmoke := flag.Bool("capture-smoke", false, "developer smoke: allow the verified helper to pause animation without hiding the source")
 	flag.Parse()
-	if err := run(*width, *height, *colorField, *pointerTest, *fullscreen); err != nil {
+	if err := run(*width, *height, *colorField, *pointerTest, *fullscreen, *captureSmoke); err != nil {
 		fmt.Fprintln(os.Stderr, "LumaTape test card:", err)
 		os.Exit(1)
 	}
 }
 
-func run(width, height int, colorField, pointerTest, fullscreen bool) error {
+func run(width, height int, colorField, pointerTest, fullscreen, captureSmoke bool) error {
 	if width < 320 || height < 240 || width > 16384 || height > 16384 {
 		return fmt.Errorf("initial client size must be between 320x240 and 16384x16384")
 	}
@@ -163,7 +166,12 @@ func run(width, height int, colorField, pointerTest, fullscreen bool) error {
 		return fmt.Errorf("register testcard class: %w", err)
 	}
 	defer unregisterClass.Call(uintptr(unsafe.Pointer(name)), instance)
-	card = cardState{start: time.Now(), colorField: colorField, pointerTest: pointerTest}
+	card = cardState{start: time.Now(), colorField: colorField, pointerTest: pointerTest, captureSmoke: captureSmoke}
+	if captureSmoke {
+		if err := registerCaptureSmoke(); err != nil {
+			return err
+		}
+	}
 	defer card.close()
 	if err := card.createFonts(); err != nil {
 		return err
@@ -228,22 +236,31 @@ func run(width, height int, colorField, pointerTest, fullscreen bool) error {
 }
 
 func windowProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
+	if card.captureSmoke && msg == captureSmokeMessage {
+		return card.setCaptureAnimation(hwnd, wparam)
+	}
 	if card.pointerTest && card.pointerMessage(hwnd, msg, wparam, lparam) {
 		return 0
 	}
 	switch msg {
 	case 0x0111: // WM_COMMAND from the native fullscreen button.
 		if lparam == card.fullscreenButton && card.fullscreenButton != 0 && wparam>>16 == 0 {
-			card.requestFullscreen(hwnd, !card.fullscreen.active)
+			card.requestFullscreen(hwnd, !(card.fullscreen.active && card.fullscreen.coversMonitor))
 			user32.NewProc("SetFocus").Call(hwnd)
 			return 0
 		}
 	case 0x007E: // WM_DISPLAYCHANGE; fullscreen follows the nearest remaining monitor.
-		if card.fullscreen.active && !card.fullscreen.changing {
+		if card.fullscreen.active && card.fullscreen.coversMonitor && !card.fullscreen.changing {
 			card.refitFullscreen(hwnd)
 		}
+	case 0x0047: // WM_WINDOWPOSCHANGED: another app may resize our borderless HWND.
+		card.observeFullscreenCoverage(hwnd)
+		// Keep DefWindowProc below: it delivers the matching WM_SIZE/WM_MOVE.
 	case 0x0001: // WM_CREATE
 		user32.NewProc("SetPropW").Call(hwnd, uintptr(unsafe.Pointer(clickProperty)), 1)
+		if card.captureSmoke {
+			user32.NewProc("SetPropW").Call(hwnd, uintptr(unsafe.Pointer(captureSmokeProperty)), 2)
+		}
 	case 0x0002: // WM_DESTROY
 		if card.pointerTest {
 			for _, name := range pointerPropertyNames {
@@ -251,6 +268,7 @@ func windowProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 			}
 		}
 		user32.NewProc("RemovePropW").Call(hwnd, uintptr(unsafe.Pointer(clickProperty)))
+		user32.NewProc("RemovePropW").Call(hwnd, uintptr(unsafe.Pointer(captureSmokeProperty)))
 		killTimer.Call(hwnd, 1)
 		postQuit.Call(0)
 		return 0
@@ -266,6 +284,9 @@ func windowProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		info.MinTrackSize = point{minimum.Right - minimum.Left, minimum.Bottom - minimum.Top}
 		return 0
 	case 0x0005, 0x0113: // WM_SIZE, WM_TIMER
+		if msg == 0x0113 && card.animationPaused {
+			return 0 // KillTimer may leave one already-queued WM_TIMER.
+		}
 		if msg == 0x0005 {
 			card.layoutFullscreenButton(hwnd)
 		}
@@ -275,7 +296,7 @@ func windowProc(hwnd uintptr, msg uint32, wparam, lparam uintptr) uintptr {
 		if card.fullscreen.changing {
 			return 0
 		}
-		if card.fullscreen.active {
+		if card.fullscreen.active && card.fullscreen.coversMonitor {
 			card.refitFullscreen(hwnd)
 			return 0
 		}

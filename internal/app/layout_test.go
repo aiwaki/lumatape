@@ -68,6 +68,37 @@ func TestGamepadFitDoesNotPretend169Is43(t *testing.T) {
 	}
 }
 
+// A game may maximize or choose another client size after an accepted 4:3
+// transaction. Only the explicitly selected mask may cover that new content;
+// a stale window/system preference must not add bars, crop or stretch it.
+func TestOSFormatsDoNotAddAnImplicitMaskAfterGameResize(t *testing.T) {
+	for _, method := range []string{"window", "system"} {
+		for _, input := range []string{"mouse-exact", "keyboard-gamepad"} {
+			for _, size := range []geometry.Size{{640, 480}, {1280, 1024}, {1920, 1080}, {3440, 1440}, {5120, 1440}} {
+				for _, scale := range []geometry.ScaleMode{geometry.Fit, geometry.Crop, geometry.Stretch} {
+					if input == "mouse-exact" && scale != geometry.Fit {
+						continue
+					}
+					t.Run(fmt.Sprintf("%s/%s/%dx%d/%s", method, input, size.W, size.H, scale), func(t *testing.T) {
+						c := validFullConfig()
+						c.InputMode = input
+						c.Aspect.Enabled, c.Aspect.Method, c.Aspect.Scale = true, method, scale
+						source := geometry.Rect{X: -size.W + 150, Y: -150, W: size.W, H: size.H}
+						monitor := geometry.Rect{X: -5120, Y: -200, W: 5120, H: 1440}
+						p, err := calculatePresentation(c, source, monitor)
+						if err != nil {
+							t.Fatal(err)
+						}
+						if p.Bounds != source || p.Area != (geometry.Rect{W: size.W, H: size.H}) || p.SourceUV != (geometry.UVRect{W: 1, H: 1}) {
+							t.Fatalf("OS format hid or moved pixels after a game resize: %+v", p)
+						}
+					})
+				}
+			}
+		}
+	}
+}
+
 func TestInputModeAloneDoesNotMoveWindowImage(t *testing.T) {
 	c := config.Default()
 	c.Mode = "full"

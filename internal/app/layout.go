@@ -27,7 +27,9 @@ func calculatePresentation(c config.Config, source, monitor geometry.Rect) (pres
 	}
 	p := presentation{Bounds: source, Area: source, SourceUV: geometry.UVRect{W: 1, H: 1}}
 	if c.Mode == "full" && c.InputMode == "keyboard-gamepad" {
-		if c.Aspect.Enabled {
+		// Window/system methods change actual OS geometry. They must not also
+		// impose a mask after a game changes or maximizes its window again.
+		if c.Aspect.Enabled && c.Aspect.Method == "mask" {
 			var err error
 			p.Area, err = geometry.Centered4x3(source)
 			if err != nil {

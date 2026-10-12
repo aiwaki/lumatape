@@ -2,20 +2,23 @@
 
 [Русский](README.md) · **English**
 
-Windows Tauri 2 host. **The application uses only a native
-tray menu.** The host creates no application window or WebView at startup.
+Windows Tauri 2 host with **a native tray menu and local settings loaded on demand**.
+The first launch creates no application window or WebView.
 Go/Win32 handles rendering, capture, hotkeys and geometry recovery. Rust manages
-the menu, file selection, clipboard operations and updates.
+the window, menu, file selection, clipboard operations and updates.
 
-`tauri.conf.json` has `app.windows: []`, embeds the minimal `../tray-assets`
-directory, and has no frontend build/dev command. WebView2 is not required for
-this windowless application; `bundle.windows.webviewInstallMode` is `skip`.
-React/Vite, `desktop/ui` and former panel source remain in the
-repository as history; separate design experiments are local backups.
-`dev:ui`, `build:ui` and browser `?demo=1` refer to those retained prototypes,
-not to the shipped tray. Their tests do not validate the native menu.
-The retained CSP and old window capability files do not
-create a WebView or expose a frontend command handler.
+`tauri.conf.json` has `app.windows: []` and embeds ready-to-use HTML/CSS/JavaScript
+from `../tray-assets`; no frontend build is needed. `settings.rs` creates the
+window on demand and destroys it on close. The window requires WebView2 Runtime;
+`bundle.windows.webviewInstallMode` is `embedBootstrapper`. NSIS includes a
+bootstrapper that downloads the runtime if needed. Portable ZIP users need
+WebView2 installed already.
+
+React/Vite, `desktop/ui` and former panel sources remain as history; separate
+design experiments are local backups. `dev:ui`, `build:ui` and `desktop/ui` tests
+belong to that archived panel. Current settings live in `desktop/tray-assets/`;
+`npm run test:settings` tests their model. Browser demo mode shows only the
+interface and does not validate the Windows engine.
 
 ## Build and resources
 
@@ -68,8 +71,10 @@ artifact and SHA256 against the release checksums and package manifest.
 Run `npm run test:host` from `desktop/` for Rust tests. The pure menu model is in
 [`src/tray_model.rs`](https://github.com/aiwaki/lumatape/blob/main/desktop/src-tauri/src/tray_model.rs), native menu lifetime and event handling are in
 [`src/tray.rs`](https://github.com/aiwaki/lumatape/blob/main/desktop/src-tauri/src/tray.rs), and system dialogs and clipboard code are in
-[`src/native_dialog.rs`](https://github.com/aiwaki/lumatape/blob/main/desktop/src-tauri/src/native_dialog.rs). Compilation and portable tests
-are separate from Windows menu qualification. No new runtime result is implied
+[`src/native_dialog.rs`](https://github.com/aiwaki/lumatape/blob/main/desktop/src-tauri/src/native_dialog.rs).
+The settings window and its narrow commands are in `src/settings.rs`; markup and
+styles are in `../tray-assets/`. Compilation and portable tests are separate from
+Windows menu, WebView2 and recovery qualification. No new runtime result is implied
 by these instructions.
 
 ### Icon
@@ -86,10 +91,11 @@ the ICO in the executables; it does not redraw the icon.
 
 Left and right click open the same Windows menu. It contains the actual status,
 one **Turn on / Turn off** action, **Game**, **Effect**,
-**Add effect from file…**, **Settings**,
+**Add effect from file…**, **Settings…**,
 **Tools**, and **Quit**. **Keep display mode** appears only while a display
-change awaits confirmation. There is no panel, window that closes to the tray,
-embedded preview, intensity slider, parameter editor or second Stop action.
+change awaits confirmation. **Settings…** opens a local window for game, effect
+and format choices with performance readings. There is no embedded preview,
+intensity slider, parameter editor or second Stop action.
 The OS controls menu appearance.
 
 **Game** lists concrete windows. IDs encode HWND, PID and process creation
@@ -99,13 +105,22 @@ replaces a closed source with another same-title window. Full-monitor capture
 remains unsupported. Whole-monitor selection for Lightweight is available only
 in the separate legacy/CLI application; the new tray selects game windows.
 
-**Settings** provides screen shape, 4:3/display choice, image distortion, scale, source DAR,
-backend and hotkey profiles. Selections apply immediately, without a form draft.
-Invalid combinations are disabled. System display changes require
-a native warning first, then explicit **Keep display mode** within the
-engine/watchdog's 15-second timeout; otherwise the previous mode is restored.
-The tray no longer offers a mask or automatic game-window resize. Legacy active
-formats are shown read-only and can be restored; choose 4:3 inside the game first.
+**Settings** provides screen shape, 4:3/display choice, processing and additional
+controls for distortion, scale, source DAR and hotkey profiles. Selections apply
+immediately, without a form draft. Invalid combinations are disabled.
+**Make window 4:3** resizes the client area once, fitting the window into the
+monitor's work area with borders and DPI accounted for. The transaction verifies
+actual geometry and rolls back failure. Window and system methods do not add a
+mask over the image. If the game restores a wide size, the status reports this;
+resizing again needs an explicit retry, not a preset change. FOV and internal
+resolution still depend on the game.
+
+For system 4:3, settings open before the switch. **Keep / Revert** and a countdown
+appear immediately afterward. The engine and watchdog enforce a 15-second limit;
+otherwise the previous mode returns. **Revert** retains the effect's enabled
+state after successful restoration; closing during confirmation performs an
+emergency off. Masking is not offered; its old profiles and recovery records
+remain readable.
 
 For a curved screen with a mouse, choose **Settings → Image distortion →
 Accurate clicks** and **Settings → Screen shape → Curved CRT**, with Full Auto,
@@ -141,7 +156,13 @@ Missing prerequisites are detected in the current GL context. Even when all
 prerequisites are present, support remains unconfirmed until a successful capture Open. Generic source,
 device or HDR failures are not fallback reasons. Actual backend and requested
 transfer are distinct. CPU submission is capped at 30 FPS; this is not a promise
-of sustained frame rate or game latency.
+of sustained frame rate or game latency. Settings distinguish newly captured
+image rate from repeated presentation of the same frame. Current and previous
+readings carry separate validity state and observation time. Timer pacing
+includes frame work in the interval, without a full extra wait after rendering.
+Static WGC frames and stalled transfers are distinguished by native capture
+health checks. These changes still need physical-GPU qualification; model tests
+do not establish the cause of a particular game's failure.
 
 ### Import and the standalone test card
 
@@ -173,29 +194,45 @@ has no embedded A/B renderer.
 
 ## Lifetime, cancellation and protocol
 
-Single-instance handling runs before engine creation. A second launch normally
-shows a native message directing the user to the existing tray. Tauri owns the
+Single-instance handling runs before engine creation. A second launch opens
+settings in the existing instance. Tauri owns the
 one visible icon and native menu; the controlled Go engine retains a hidden
 Win32 controller for hotkeys and recovery without registering another icon or
 opening its legacy settings. Standalone Go CLI use retains the original Win32
 interface.
 
 The host polls the authoritative snapshot, source catalog and shader catalog,
-with one refresh in flight and a three-second timeout per read. Native menu
-updates run on the main thread. Config-changing actions are serialized; Power
+with one menu refresh in flight and a three-second timeout per read. Native menu
+updates run on the main thread. Open settings read snapshots separately without
+maintaining a second config. Mutations from both interfaces are serialized; Power
 remains available to cancel an in-flight action. Off always invokes `emergency`,
 including format-only, pending confirmation, unsaved or recovery states. Unknown
 state also offers Off rather than attempting an implicit start.
 
 Each apply clones a fresh config and includes `expected_emergency_sequence` plus
 `expected_config`. Go checks both before replacing state. The config comparison
-is optional only for legacy clients; the new tray always sends it. Rejected
+is optional only for legacy clients; the tray and settings always send it. Rejected
 changes are not automatically retried against newer state. The host captures
 intent before native dialogs and observes advancing engine emergency events,
 including hotkeys, to cancel pending follow-up work. Responses from before the
 emergency cannot restore stale menu state. If a refresh fails, stale
 editable state is discarded and the emergency action remains reachable. Runtime
 reasons and operation failures are available through **Tools → Last error…**.
+
+The WebView exposes only `settings_snapshot` and `settings_action`. The latter
+accepts an allowed action ID, emergency sequence, cancellation epoch and, for
+display confirmation, a token for that specific change. It calls shared `execute`,
+not a generic engine RPC. The capability is restricted to the local `main` window;
+CSP and navigation exclude remote pages. There are no direct shell, filesystem
+or updater permissions. Intent is captured before awaits and checked again before
+application. Closing cancels pending continuations. A pending-display marker is
+armed before preparation; a stale read cannot clear a later transaction's marker.
+
+Normal closure destroys the window and retains the effect's current state.
+Closing during display preparation or confirmation calls `emergency` first:
+the effect turns off and owned changes are restored. A cleanup failure keeps the
+window open. This differs from **Revert**, which removes only the format and
+retains the effect's enabled state after successful restoration.
 
 On Windows, icon reachability is checked via `Shell_NotifyIconGetRect`.
 tray-icon handles Explorer's TaskbarCreated notification for the same native
@@ -226,8 +263,9 @@ anything.
 
 Ordinary developer builds are **unconfigured** and send no update requests.
 Official release builds embed the LumaTape endpoint and public key; no feed,
-signing key or credentials from another product are used. There is no WebView2
-bootstrap download; its installer mode is `skip`.
+signing key or credentials from another product are used. WebView2 installation
+through the NSIS bootstrapper is a separate runtime prerequisite, not LumaTape's
+update channel.
 
 A release operator must supply a new LumaTape public key and HTTPS feed at build
 time using `LUMATAPE_UPDATE_PUBLIC_KEY` and `LUMATAPE_UPDATE_ENDPOINT`, produce
@@ -265,11 +303,12 @@ collects full available texts from the locked Windows dependency graph using
 offline Cargo metadata. Run it after fetching/building dependencies. Missing
 full texts are errors; an SPDX declaration alone is not a replacement.
 
-Tray packaging does not collect npm notices: React, shadcn and the Mona Sans font
+Application packaging does not collect npm notices: current HTML/CSS/JavaScript
+imports no npm packages. React, shadcn and the Mona Sans font
 are used only by the archived panel and are not included in this package.
 `npm ci` remains a build step for the pinned Tauri CLI; `node_modules` is not shipped.
 Rust notices are retained for the entire locked Windows graph, including Wry
-dependencies: creating no WebView window does not remove them from the Cargo graph.
+dependencies used by the settings window.
 Packaging verifies the Cargo.lock hash and each license text checksum,
 copying only manifest-listed paths alongside native notices.
 Sync-conflict `LICENSE 2` copies cannot enter the ZIP.

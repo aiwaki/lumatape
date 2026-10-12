@@ -36,6 +36,9 @@ func TestPointerStartupFailureDisablesAndPersistsWithoutClosingTray(t *testing.T
 	if a.quit || a.cfg.Enabled || a.cfg.Aspect.Enabled || !a.suspended || a.pointerFailure != nil || a.phase != "error" || a.lastError == "" {
 		t.Fatal("startup failure did not leave a usable, disabled tray state")
 	}
+	if a.lastPointerFailure == "" || a.lastPointerFailureAt.IsZero() {
+		t.Fatal("cursor failure details missing from support diagnostics")
+	}
 	if a.emergencyBarrier.sequence != 1 {
 		t.Fatal("stale controller intent can re-enable the failed effect")
 	}

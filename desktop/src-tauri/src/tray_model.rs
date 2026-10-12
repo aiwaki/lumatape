@@ -5,19 +5,19 @@ use crate::i18n::text;
 use serde_json::{json, Value};
 use std::collections::HashSet;
 
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct Entry {
     pub id: String,
     pub label: String,
     pub enabled: bool,
     pub checked: Option<bool>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct Group {
     pub label: String,
     pub entries: Vec<Entry>,
 }
-#[derive(Clone, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq, serde::Serialize)]
 pub struct MenuModel {
     pub emergency_sequence: u64,
     pub status: String,
@@ -353,6 +353,7 @@ impl<'a> Snapshot<'a> {
                 "waiting-source",
                 "paused-focus",
                 "paused-moving",
+                "paused-offscreen",
                 "waiting-frame",
                 "source-closed",
                 "error",
@@ -539,7 +540,7 @@ pub fn plan(
     if *action == Action::Power && state.should_stop {
         return plan(&Action::Off, snapshot, sources, shaders);
     }
-    if state.recovery || state.confirmation {
+    if state.recovery || state.confirmation && *action != Action::Format("off".into()) {
         return Err(text(
             "Сначала завершите восстановление или подтвердите видеорежим.",
             "Complete restoration or confirm the display mode first.",
@@ -554,8 +555,8 @@ pub fn plan(
         Action::Power => {
             if config["target"]["kind"] != "window" {
                 return Err(text(
-                    "Выберите окно игры. Запуск на всём мониторе не выполняется автоматически.",
-                    "Select a game window. Full-monitor capture does not start automatically.",
+                    "Выберите окно игры. Захват всего монитора не поддерживается.",
+                    "Select a game window. Whole-monitor capture is not supported.",
                 )
                 .into());
             }
@@ -708,12 +709,14 @@ pub fn plan(
             );
         }
     }
-    let needs_live_source = *action == Action::Power
-        || matches!(action, Action::Source(_))
-        || config["enabled"] == true
-        || config["aspect"]["enabled"] == true
-        || config["mode"] != state.config["mode"]
-        || config["capture"] != state.config["capture"];
+    let restoring_format = *action == Action::Format("off".into());
+    let needs_live_source = !restoring_format
+        && (*action == Action::Power
+            || matches!(action, Action::Source(_))
+            || config["enabled"] == true
+            || config["aspect"]["enabled"] == true
+            || config["mode"] != state.config["mode"]
+            || config["capture"] != state.config["capture"]);
     if config["target"]["kind"] == "window" {
         if let Some(selected) = &source {
             let key = source_key(selected)?;
@@ -742,6 +745,9 @@ pub fn plan(
         source = None;
     }
     let mut payload = json!({"config":config,"expected_config":state.config,"expected_emergency_sequence":state.sequence});
+    if matches!(action, Action::Format(method) if method == "window") {
+        payload["reapply_window_format"] = json!(true);
+    }
     if let Some(source) = source {
         payload["source"] = source;
     }
@@ -935,6 +941,7 @@ pub fn build(snapshot: &Value, sources: &Value, shaders: &Value) -> Result<MenuM
     let mut format_entries = choices(
         &[
             ("off", text("Исходный формат", "Original aspect ratio")),
+            ("window", text("Окно игры 4:3", "4:3 game window")),
             ("system", text("Разрешение Windows…", "Windows resolution…")),
         ],
         Action::Format,
@@ -944,16 +951,23 @@ pub fn build(snapshot: &Value, sources: &Value, shaders: &Value) -> Result<MenuM
             "off"
         },
     );
+    if c["aspect"]["enabled"] == true
+        && c["aspect"]["method"] == "window"
+        && snapshot["runtime"]["format_active"] != true
+    {
+        if let Some(entry) = format_entries
+            .iter_mut()
+            .find(|entry| entry.id == "model:format:window")
+        {
+            entry.checked = Some(false);
+        }
+    }
     // Retired formats remain readable/restorable in legacy profiles. Show the
     // actual preference without offering to activate it or migrating on read.
     let retired_format = match c["aspect"]["method"].as_str() {
         Some("mask") => Some((
             "mask",
             text("Маска 4:3 · из профиля", "4:3 mask · from profile"),
-        )),
-        Some("window") => Some((
-            "window",
-            text("Окно 4:3 · из профиля", "4:3 window · from profile"),
         )),
         _ => None,
     };
@@ -1091,6 +1105,7 @@ pub fn build(snapshot: &Value, sources: &Value, shaders: &Value) -> Result<MenuM
         "waiting-source" => text("Ожидает окно игры", "Waiting for game window"),
         "paused-focus" => text("Вернитесь в игру", "Return to the game"),
         "paused-moving" => text("Пауза при движении", "Paused while moving"),
+        "paused-offscreen" => text("Верните окно на экран", "Move the window fully on screen"),
         "waiting-frame" => text("Ожидает свежий кадр", "Waiting for a fresh frame"),
         "source-closed" => text("Окно игры закрыто", "Game window closed"),
         "error" => text("Ошибка", "Error"),
@@ -1454,17 +1469,49 @@ mod tests {
     }
 
     #[test]
+    fn explicit_window_format_reapplies_but_preset_does_not() {
+        let (mut s, sources, shaders) = fixture();
+        s["config"]["aspect"]["method"] = json!("window");
+        s["config"]["aspect"]["enabled"] = json!(true);
+        let action = plan(&Action::Format("window".into()), &s, &sources, &shaders).unwrap();
+        assert_eq!(action.payload["reapply_window_format"], true);
+        let preset = plan(&Action::Preset("VHS Tape".into()), &s, &sources, &shaders).unwrap();
+        assert!(preset.payload.get("reapply_window_format").is_none());
+        let model = build(&s, &sources, &shaders).unwrap();
+        let entry = model
+            .settings
+            .iter()
+            .flat_map(|g| &g.entries)
+            .find(|e| e.id == "model:format:window")
+            .unwrap();
+        assert_eq!(
+            entry.checked,
+            Some(false),
+            "requested format is not applied geometry"
+        );
+    }
+
+    #[test]
+    fn pending_display_can_revert_even_after_source_closes() {
+        let (mut s, mut sources, shaders) = fixture();
+        s["config"]["enabled"] = json!(true);
+        s["config"]["aspect"]["enabled"] = json!(true);
+        s["config"]["aspect"]["method"] = json!("system");
+        s["confirmation_deadline"] = json!("2026-10-11T00:00:15Z");
+        sources["windows"] = json!([]);
+        let result = plan(&Action::Format("off".into()), &s, &sources, &shaders).unwrap();
+        assert_eq!(result.payload["config"]["aspect"]["enabled"], false);
+        assert_eq!(result.payload["config"]["enabled"], true);
+        assert!(result.payload.get("source").is_none());
+        assert!(plan(&Action::Format("window".into()), &s, &sources, &shaders).is_err());
+    }
+
+    #[test]
     fn retired_formats_are_not_choices_but_legacy_profiles_can_be_restored() {
-        for (method, label) in [
-            (
-                "mask",
-                text("Маска 4:3 · из профиля", "4:3 mask · from profile"),
-            ),
-            (
-                "window",
-                text("Окно 4:3 · из профиля", "4:3 window · from profile"),
-            ),
-        ] {
+        for (method, label) in [(
+            "mask",
+            text("Маска 4:3 · из профиля", "4:3 mask · from profile"),
+        )] {
             let (mut snapshot, sources, shaders) = fixture();
             let format = |model: MenuModel| {
                 model
@@ -1821,6 +1868,7 @@ mod tests {
             ("waiting-source", ""),
             ("paused-focus", ""),
             ("paused-moving", ""),
+            ("paused-offscreen", ""),
             ("waiting-frame", ""),
             ("source-closed", ""),
             ("error", ""),

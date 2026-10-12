@@ -19,6 +19,15 @@ type cursorDriver interface {
 	Close() error
 }
 
+// A terminal diagnostic may wait for this long only after native recovery has
+// finished. A stopped or blocked parent must never keep the worker alive.
+const terminalDeliveryTimeout = 100 * time.Millisecond
+
+type workerOutput struct {
+	response response
+	written  chan struct{}
+}
+
 type leaseState struct {
 	sequence uint64
 	frame    Frame
@@ -87,30 +96,61 @@ func runWorker(input io.Reader, output io.Writer, factory func(identity, func(st
 		}
 		readError <- err
 	}()
-	outputs := make(chan response, 16)
+	outputs := make(chan workerOutput, 16)
 	writeError := make(chan error, 1)
+	writerDone := make(chan struct{})
 	go func() {
+		defer close(writerDone)
 		enc := json.NewEncoder(output)
 		for {
 			select {
 			case <-finished:
 				return
 			case r := <-outputs:
-				if err := enc.Encode(r); err != nil {
+				if err := enc.Encode(r.response); err != nil {
 					writeError <- err
 					return
+				}
+				if r.written != nil {
+					close(r.written)
 				}
 			}
 		}
 	}()
 	send := func(r response) error {
 		select {
-		case outputs <- r:
+		case outputs <- workerOutput{response: r}:
 			return nil
 		default:
 			return errors.New("cursor worker output queue full")
 		}
 	}
+	// Registered before the driver's cleanup below, so restoration, native
+	// teardown and parent-loss classification all happen before reporting. Do
+	// not just enqueue and close finished: that can discard the actual failure
+	// and leave the parent with an unhelpful EOF. Delivery has one fixed budget,
+	// including any older replies still queued ahead of the terminal response.
+	defer func() {
+		if result == nil {
+			return
+		}
+		timer := time.NewTimer(terminalDeliveryTimeout)
+		defer timer.Stop()
+		written := make(chan struct{})
+		message := workerOutput{response: response{Event: "error", Error: result.Error()}, written: written}
+		select {
+		case outputs <- message:
+		case <-writerDone:
+			return
+		case <-timer.C:
+			return
+		}
+		select {
+		case <-written:
+		case <-writerDone:
+		case <-timer.C:
+		}
+	}()
 	var hello request
 	select {
 	case hello = <-commands:
@@ -128,7 +168,6 @@ func runWorker(input io.Reader, output io.Writer, factory func(identity, func(st
 		_ = send(response{Event: "initializing", Stage: stage})
 	})
 	if err != nil {
-		_ = send(response{Event: "error", Error: err.Error()})
 		return err
 	}
 	// Losing our already-bound parent is a normal recovery trigger, whether the
@@ -192,7 +231,6 @@ func runWorker(input io.Reader, output io.Writer, factory func(identity, func(st
 				accepted := lease.accept(r, time.Now())
 				if accepted {
 					if err = restore(false); err != nil {
-						_ = send(response{Event: "error", Error: err.Error()})
 						return err
 					}
 					last = Status{}
@@ -213,7 +251,6 @@ func runWorker(input io.Reader, output io.Writer, factory func(identity, func(st
 				}
 				lease.active = false
 				if err = restore(true); err != nil {
-					_ = send(response{Event: "error", Error: err.Error()})
 					return err
 				}
 				if err = publish(Status{}); err != nil {
@@ -225,7 +262,6 @@ func runWorker(input io.Reader, output io.Writer, factory func(identity, func(st
 			if tickErr != nil {
 				restoreErr := restore(true)
 				err = errors.Join(tickErr, restoreErr)
-				_ = send(response{Event: "error", Error: err.Error()})
 				return err
 			}
 			if err = publish(status); err != nil {

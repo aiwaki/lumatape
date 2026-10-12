@@ -2,7 +2,7 @@
 
 [Русский](WINDOWS_VALIDATION.md) | [English](WINDOWS_VALIDATION.en.md)
 
-This protocol covers the current **native Tauri tray** and Go rendering engine.
+This protocol covers the current **Tauri tray and settings window**, plus the Go rendering engine.
 It is a checklist, not a claim that every combination has passed. Record results
 against the exact release, binary hashes and environment under test. Browser demos
 and the retained React prototypes do not qualify the shipped interface.
@@ -42,7 +42,7 @@ Run checks for changed components, preserving unrelated green results:
 
 ```sh
 sh scripts/check.sh
-(cd desktop && npm run test:host)
+(cd desktop && npm run test:settings && npm run test:host)
 python3 -m unittest discover -s scripts -p 'test_package_desktop.py'
 python3 -m unittest discover -s scripts -p 'test_prepare_update.py'
 python3 -m unittest discover -s desktop/scripts -p 'test_*licenses.py'
@@ -52,7 +52,7 @@ The Cargo build uses `Cargo.lock` and `--locked`. Windows-only Go test executabl
 must also run on Windows with a separately recorded exit code. Native
 `lumatape_capture_abi_smoke.exe` checks the capture ABI and error lifecycle; it
 does not establish successful capture. The package validates required exports
-including `open_ex` and `get_stats`, rather than accepting an old GPU-only DLL.
+including `open_ex`, `get_stats` and `can_reuse_idle`, rather than accepting an old GPU-only DLL.
 
 Mac shader readback tests are separate from Windows driver, DWM and WGC tests.
 The executable capability matrix and deterministic geometry/transition tests
@@ -163,6 +163,14 @@ click, stuck button or retained projected cursor after disable/quit/failure.
 Changing focus must not steal it back. Test both sides of every window edge and
 repeat on a physical Windows system; a VM screenshot may omit the host cursor.
 
+With the curved screen enabled, switch from the arrow to text and resize
+cursors, then back: the effect must stay enabled. Background-inverting cursors
+use white pixels with a black outline; check light and dark backgrounds and
+confirm that the click position does not move.
+`go test ./internal/pointer -run TestNativeCursorShapesAndHotspot -v` checks
+real HCURSOR rendering, buffer reuse and hotspots in a hidden HWND; it does not
+replace testing the complete effect over a window.
+
 Use the [dedicated input helpers](../scripts/windows-ui-smoke/README.en.md), which
 pin the target identity, check actual testcard counters and release injected
 holds on failure. Guest SendInput confirms Windows command handling, not physical
@@ -173,15 +181,18 @@ conflict without losing the working emergency shortcut.
 
 ## Format and recovery
 
-The tray offers Original aspect ratio and Windows resolution. Masking and
-resizing the game window are retired choices; an active legacy profile remains
-readable and can be restored. For ordinary 4:3 play, first choose a 4:3 resolution
-inside the game. 1280×1024 is 5:4. A Windows mode switch does not guarantee a game's
-internal resolution/FOV or the monitor's scaling policy.
+Settings offers Make window 4:3, Restore original format and a separate Windows
+resolution change. Window formatting must save restoration state, fit the client
+and frame into the monitor work area, and verify the actual client size. It adds
+no mask. Test game-enforced size limits, subsequent game resizes, explicit retry
+and preset changes without repeated resizing. 1280×1024 is 5:4; the game still
+controls internal resolution and FOV.
 
 Display changes use only Windows-listed modes and require preflight plus a
-15-second confirmation. Keep display mode appears only while confirmation is
-pending. Check confirm, timeout, late confirmation, emergency off, normal quit,
+15-second confirmation. Settings opens before the change; Keep, Revert and the
+countdown appear immediately afterwards. Unrelated modal actions are disabled.
+Closing settings while confirmation is pending turns the effect off and restores
+the owned change. Check confirm, timeout, late confirmation, emergency off, normal quit,
 main-process termination and a subsequent external display change. Restore only
 changes still owned by LumaTape. Test failure at preparation, application,
 readback, rollback and recovery-journal writes. The watchdog must remain alive
@@ -209,3 +220,31 @@ shaders, Windows CPU compatibility, hardware GPU interop and installer updates i
 the report. Mark unavailable equipment and unrun cases explicitly. Exclusive
 fullscreen, HDR, Full monitor capture and anti-cheat/protected-capture bypass are
 outside the supported scope.
+
+## Regressions from the October 11, 2026 report
+
+On the new candidate, check:
+
+- Animate the test card, hold a static image for at least 5 seconds, then resume.
+  An unchanged image alone must not hide the effect. Idle reuse requires the new
+  capture DLL; loading an older DLL does not qualify this feature.
+- Genuinely late frames, recovery through a series of fresh frames, then another
+  stall. Repeated stalls should produce an explained pause rather than continuous
+  flicker. A healthy capture with no new frames cannot reliably distinguish a
+  static source from a silently stalled source; record this limitation.
+- Alt+Tab, opening settings, minimize/restore, source closure and off/on. Unrelated
+  foreground windows must remain uncovered.
+- CPU: record `frame_rates.present_fps` and `fresh_frame_fps` separately. Check the
+  timestamp of `last_sample` after returning to settings; an old measurement must
+  not be labelled current. A static source need not produce 30 new frames per second.
+- Format at 2560×1080, 3440×1440 and 5120×1440, including frames, DPI and negative
+  coordinates. Verify actual client dimensions. These exercise the general
+  calculation rather than special handling for one monitor.
+- Keep, Revert, timeout, window close, late IPC responses and emergency off during
+  application. An old response must not re-enable the effect.
+
+The isolated animation/static/metrics scenario is described in
+[windows-control-smoke](../scripts/windows-control-smoke/README.en.md).
+Browser `?demo=1` validates only the interface. Release qualification still needs
+real Windows WebView2, CPU measurements without PNG capture, and physical GPU
+interop. The reported RTX 3070 is not currently available for testing.

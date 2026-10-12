@@ -1,6 +1,7 @@
 package app
 
 import (
+	"fmt"
 	"math/rand"
 	"testing"
 
@@ -19,6 +20,41 @@ func TestWindow43KeepsDecorationsInsideWorkArea(t *testing.T) {
 	}
 	if client.W*3 != client.H*4 {
 		t.Fatalf("client is not exact 4:3: %+v", client)
+	}
+}
+
+func TestWindow43OnUltrawideUsesHeightAndPreservesDecorations(t *testing.T) {
+	// DPI scales here are physical non-client metrics supplied by Windows.
+	// Maximized windows use their normal decoration metrics before SW_RESTORE.
+	for _, monitor := range []geometry.Rect{
+		{W: 3440, H: 1400},
+		{X: -5120, Y: -320, W: 5120, H: 1400},
+		{X: 1920, Y: -900, W: 2560, H: 1040},
+	} {
+		for _, dpi := range []int{96, 120, 144, 192} {
+			for _, frame := range []string{"normal", "maximized", "borderless"} {
+				t.Run(fmt.Sprintf("%dx%d/%s/dpi%d", monitor.W, monitor.H, frame, dpi), func(t *testing.T) {
+					insets := clientInsets{}
+					if frame != "borderless" {
+						insets = clientInsets{8 * dpi / 96, 31 * dpi / 96, 8 * dpi / 96, 8 * dpi / 96}
+					}
+					client, err := fitClient43(monitor, insets)
+					if err != nil {
+						t.Fatal(err)
+					}
+					if client.W*3 != client.H*4 || client.H != (monitor.H-insets.Top-insets.Bottom)/3*3 {
+						t.Fatalf("ultrawide did not use the available height: %+v", client)
+					}
+					left := client.X - insets.Left - monitor.X
+					right := monitor.X + monitor.W - (client.X + client.W + insets.Right)
+					top := client.Y - insets.Top - monitor.Y
+					bottom := monitor.Y + monitor.H - (client.Y + client.H + insets.Bottom)
+					if left < 0 || right < 0 || top < 0 || bottom < 0 || left-right > 1 || right-left > 1 || top-bottom > 1 || bottom-top > 1 {
+						t.Fatalf("decorated 4:3 window is offscreen or not centred: client=%+v margins=%d,%d,%d,%d", client, left, right, top, bottom)
+					}
+				})
+			}
+		}
 	}
 }
 

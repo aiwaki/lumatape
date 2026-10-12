@@ -20,4 +20,7 @@ type ApplyPayload struct {
 	Source                    *WindowSource   `json:"source"`
 	ExpectedEmergencySequence *uint64         `json:"expected_emergency_sequence"`
 	ExpectedConfig            json.RawMessage `json:"expected_config,omitempty"`
+	// An explicit window-format action may retry a size rejected later by the
+	// game. Preference edits never set this flag or replay OS geometry.
+	ReapplyWindowFormat bool `json:"reapply_window_format,omitempty"`
 }

@@ -20,9 +20,11 @@ type windowPlacement struct {
 }
 
 type fullscreenState struct {
-	active, changing bool
-	style            uintptr
-	placement        windowPlacement
+	// active owns the saved pre-fullscreen placement, even after another app
+	// resizes this borderless HWND. coversMonitor describes what is visible now.
+	active, changing, coversMonitor bool
+	style                           uintptr
+	placement                       windowPlacement
 }
 
 var (
@@ -93,13 +95,28 @@ func (f *fullscreenState) restore(hwnd uintptr) error {
 
 func (c *cardState) setFullscreen(hwnd uintptr, enabled bool) error {
 	f := &c.fullscreen
-	if f.changing || f.active == enabled {
+	if f.changing || (!enabled && !f.active) || (enabled && f.active && f.coversMonitor) {
 		return nil
+	}
+	if enabled && f.active {
+		// An external 4:3 resize may have reduced our borderless window. F11
+		// should fill the monitor again without replacing the original restore
+		// point with the reduced borderless placement.
+		f.changing = true
+		defer func() { f.changing = false; c.layoutFullscreenButton(hwnd) }()
+		bounds, err := monitorBounds(hwnd)
+		if err == nil {
+			err = fitMonitor(hwnd, bounds)
+		}
+		if err == nil {
+			f.coversMonitor = true
+		}
+		return err
 	}
 	f.changing = true
 	defer func() { f.changing = false; c.layoutFullscreenButton(hwnd) }()
 	if !enabled {
-		f.active = false
+		f.active, f.coversMonitor = false, false
 		return f.restore(hwnd)
 	}
 	style, _, err := getWindowStyle.Call(hwnd, ^uintptr(15))
@@ -123,9 +140,10 @@ func (c *cardState) setFullscreen(hwnd uintptr, enabled bool) error {
 		err = fitMonitor(hwnd, bounds)
 	}
 	if err != nil {
-		f.active = false
+		f.active, f.coversMonitor = false, false
 		return errors.Join(err, f.restore(hwnd))
 	}
+	f.coversMonitor = true
 	return nil
 }
 
@@ -147,6 +165,28 @@ func (c *cardState) refitFullscreen(hwnd uintptr) {
 	if err != nil {
 		c.err = errors.Join(err, c.setFullscreen(hwnd, false))
 		destroyWindow.Call(hwnd)
+	} else {
+		c.fullscreen.coversMonitor = true
+	}
+}
+
+// Observe external movement/resizing without fighting it. The original
+// placement remains owned until Escape exits the borderless session.
+func (c *cardState) observeFullscreenCoverage(hwnd uintptr) {
+	f := &c.fullscreen
+	if !f.active || f.changing {
+		return
+	}
+	if minimized, _, _ := user32.NewProc("IsIconic").Call(hwnd); minimized != 0 {
+		return
+	}
+	var actual rect
+	ok, _, _ := user32.NewProc("GetWindowRect").Call(hwnd, uintptr(unsafe.Pointer(&actual)))
+	monitor, err := monitorBounds(hwnd)
+	covers := ok != 0 && err == nil && actual == monitor
+	if f.coversMonitor != covers {
+		f.coversMonitor = covers
+		c.layoutFullscreenButton(hwnd)
 	}
 }
 
@@ -162,7 +202,7 @@ func (c *cardState) fullscreenKey(hwnd uintptr, msg message) bool {
 		return false
 	}
 	if keyDown && msg.LParam&(1<<30) == 0 { // Ignore held-key auto-repeat.
-		c.requestFullscreen(hwnd, !exit && !c.fullscreen.active)
+		c.requestFullscreen(hwnd, !exit && !(c.fullscreen.active && c.fullscreen.coversMonitor))
 	}
 	return true
 }
@@ -194,7 +234,7 @@ func (c *cardState) layoutFullscreenButton(hwnd uintptr) {
 	}
 	setWindowPos.Call(c.fullscreenButton, 0, uintptr(x), 8, uintptr(width), uintptr(height), 0x4|0x10)
 	label := locale.Text("На весь экран · F11", "Fullscreen · F11")
-	if c.fullscreen.active {
+	if c.fullscreen.active && c.fullscreen.coversMonitor {
 		label = locale.Text("В окно · Esc", "Windowed · Esc")
 	}
 	text, _ := syscall.UTF16PtrFromString(label)

@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"path/filepath"
+	"time"
 
 	"github.com/aiwaki/lumatape/internal/geometry"
 	"github.com/aiwaki/lumatape/internal/locale"
@@ -29,19 +30,8 @@ func (a *application) updateProjectedPointer(p presentation, source geometry.Siz
 	if !enabled {
 		return a.stopProjectedPointer()
 	}
-	if a.pointerSession == nil {
-		session, err := pointer.Start(filepath.Join(a.directory, "lumatape-watchdog.exe"))
-		if err != nil {
-			cause := fmt.Errorf(locale.Text("подготовка курсора для выпуклого экрана: %w", "preparing cursor for the convex screen: %w"), err)
-			if a.snapshotPath != "" {
-				return cause // an explicit image qualification must still fail
-			}
-			a.pointerFailure = &projectedPointerStartupError{cause}
-			a.hide()
-			return nil // persist OFF and recover at the normal frame boundary
-		}
-		a.pointerSession = session
-		a.record("pointer_worker_ready", nil)
+	if err := a.ensureProjectedPointer(); err != nil || a.pointerFailure != nil {
+		return err
 	}
 	if a.pointerTarget != a.target {
 		created, alive, err := win32.ProcessIdentity(a.target.PID)
@@ -59,6 +49,44 @@ func (a *application) updateProjectedPointer(p presentation, source geometry.Siz
 	}
 	a.pointerEngaged = true
 	return nil
+}
+
+// Starting the companion has no cursor side effects until Update sends a
+// presented mapping. Prepare it before opening capture so cold initialization
+// cannot expire the only first frame of a static source.
+func (a *application) ensureProjectedPointer() error {
+	if a.pointerSession == nil {
+		session, err := pointer.Start(filepath.Join(a.directory, "lumatape-watchdog.exe"))
+		if err != nil {
+			cause := fmt.Errorf(locale.Text("подготовка курсора для выпуклого экрана: %w", "preparing cursor for the convex screen: %w"), err)
+			if a.snapshotPath != "" {
+				return cause // an explicit image qualification must still fail
+			}
+			a.pointerFailure = &projectedPointerStartupError{cause}
+			a.hide()
+			return nil // persist OFF and recover at the normal frame boundary
+		}
+		a.pointerSession = session
+		a.record("pointer_worker_ready", nil)
+	}
+	return nil
+}
+
+func (a *application) prepareProjectedPointer(p presentation, source geometry.Size) error {
+	coordinates := ""
+	if a.shaderProgram != nil {
+		coordinates = a.shaderProgram.Metadata.Coordinates
+	}
+	_, enabled := projectedPointerMap(a.cfg, p, source, coordinates, 0)
+	if !enabled || a.pointerSession != nil {
+		return nil
+	}
+	if err := a.ensureProjectedPointer(); err != nil || a.pointerFailure != nil {
+		return err
+	}
+	// A transactional settings apply may already have opened a candidate capture
+	// before worker startup. Discard that unpresented session before acquiring.
+	return a.closeCapture()
 }
 
 func (a *application) stopProjectedPointer() error {
@@ -132,6 +160,8 @@ func (a *application) recoverProjectedPointer(cause error) error {
 		closeErr = session.Close()
 		confirmed = session.RestorationConfirmed()
 	}
+	a.lastPointerFailure = errors.Join(cause, closeErr).Error()
+	a.lastPointerFailureAt = time.Now()
 	a.pointerEngaged = false
 	a.pointerSession = nil
 	a.hide()

@@ -3,7 +3,7 @@ package app
 import "testing"
 
 func TestRequestedEffectDoesNotClaimPausedOrFailedPresentation(t *testing.T) {
-	for _, phase := range []string{"starting", "ready", "disabled", "bypass", "paused-settings", "paused-stale", "waiting-source", "paused-focus", "paused-moving", "waiting-frame", "source-closed", "error", "recovery-error"} {
+	for _, phase := range []string{"starting", "ready", "disabled", "bypass", "paused-settings", "paused-stale", "waiting-source", "paused-focus", "paused-moving", "paused-offscreen", "waiting-frame", "source-closed", "error", "recovery-error"} {
 		t.Run(phase, func(t *testing.T) {
 			s := RuntimeStatus{Enabled: true, EffectiveIntensity: 1, Phase: phase, Backend: "full-compatibility"}
 			s.observePresentation(true, false)

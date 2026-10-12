@@ -61,6 +61,13 @@ type snapshot struct {
 		Compatibility      capabilityStatus `json:"compatibility"`
 		ShaderID           string           `json:"shader_id"`
 		ShaderName         string           `json:"shader_name"`
+		SurfaceVisible     bool             `json:"surface_visible"`
+		EffectActive       bool             `json:"effect_active"`
+		FrameRates         captureRates     `json:"frame_rates"`
+		CaptureRecovery    struct {
+			State    string `json:"state"`
+			Failures uint64 `json:"failures"`
+		} `json:"capture_recovery"`
 	} `json:"runtime"`
 	Hotkeys struct {
 		Registered bool   `json:"registered"`
@@ -77,6 +84,7 @@ type peer struct {
 	finished        bool
 	protocol        *os.File
 	protocolFailure error
+	observe         func(envelope)
 }
 
 var user32 = syscall.NewLazyDLL("user32.dll")
@@ -127,9 +135,9 @@ func run() (result error) {
 	engine := flag.String("engine", "", "exact engine executable path")
 	targetPID := flag.Uint("target-pid", 0, "already-running test card process PID")
 	targetTitle := flag.String("target-title", "", "optional exact title within target PID")
-	testCase := flag.String("case", "lifecycle", "lifecycle, eof, capabilities (Parallels), shaders, presets (Parallels), or explicit input")
+	testCase := flag.String("case", "lifecycle", "lifecycle, eof, capabilities (Parallels), shaders, presets (Parallels), capture-health, or explicit input")
 	inputHelper := flag.String("input-helper", "", "input case: exact absolute path to separately built source-input executable")
-	targetExe := flag.String("target-exe", "", "input case: exact absolute executable path of the owned test card")
+	targetExe := flag.String("target-exe", "", "input/capture-health case: exact absolute executable path of the owned test card")
 	output := flag.String("output", "", "artifact directory (default private temp directory)")
 	gpuUnavailable := flag.Bool("expect-gpu-unavailable", false, "assert explicit GPU rejection preserves CPU configuration, for Parallels")
 	shaderFile := flag.String("shader-file", "", "shaders case: exact Amber CRT .lumatape.glsl example path")
@@ -139,8 +147,8 @@ func run() (result error) {
 	if *engine == "" || *targetPID == 0 || uint64(*targetPID) > uint64(^uint32(0)) {
 		return errors.New("--engine and --target-pid are required")
 	}
-	if *testCase != "lifecycle" && *testCase != "eof" && *testCase != "input" && *testCase != "capabilities" && *testCase != "shaders" && *testCase != "presets" {
-		return errors.New("--case must be lifecycle, eof, capabilities, shaders, presets or input")
+	if *testCase != "lifecycle" && *testCase != "eof" && *testCase != "input" && *testCase != "capabilities" && *testCase != "shaders" && *testCase != "presets" && *testCase != "capture-health" {
+		return errors.New("--case must be lifecycle, eof, capabilities, shaders, presets, capture-health or input")
 	}
 	if (*testCase == "capabilities" || *testCase == "presets") && !*gpuUnavailable {
 		return errors.New("capabilities/presets case requires --expect-gpu-unavailable for the explicit unsupported-GPU fixture")
@@ -166,6 +174,10 @@ func run() (result error) {
 			if err != nil || info.IsDir() {
 				return fmt.Errorf("input executable %q is unavailable: %w", path, errors.Join(err, errors.New("regular executable file required")))
 			}
+		}
+	} else if *testCase == "capture-health" {
+		if *inputHelper != "" || !filepath.IsAbs(*targetExe) {
+			return errors.New("capture-health requires absolute --target-exe and does not use --input-helper")
 		}
 	} else if *inputHelper != "" || *targetExe != "" {
 		return errors.New("--input-helper/--target-exe require explicit --case input, shaders or presets")
@@ -202,7 +214,7 @@ func run() (result error) {
 		return err
 	}
 	assetRoot := ""
-	if *testCase == "shaders" {
+	if *testCase == "shaders" || *testCase == "capture-health" {
 		assetRoot = filepath.Join(dir, "local-app-data")
 		if err = os.MkdirAll(assetRoot, 0700); err != nil {
 			return err
@@ -265,6 +277,9 @@ func run() (result error) {
 	emit("source", map[string]any{"source": chosen, "original_rect": original})
 	if *testCase == "presets" {
 		return runPresetsCase(p, *chosen, hwnd, original, initial, *inputHelper, *targetExe, dir)
+	}
+	if *testCase == "capture-health" {
+		return runCaptureHealthCase(p, *chosen, hwnd, original, initial, *targetExe, dir)
 	}
 	cfg := cloneMap(initial.Config)
 	cfg["enabled"], cfg["mode"], cfg["input_mode"] = true, "full", "mouse-exact"
@@ -599,6 +614,9 @@ func (p *peer) ready() error {
 	}
 }
 func (p *peer) note(e envelope) {
+	if p.observe != nil {
+		p.observe(e)
+	}
 	_ = json.NewEncoder(p.protocol).Encode(map[string]any{"time": time.Now(), "event": e.Event, "id": e.ID, "ok": e.OK, "error": e.Error})
 	if e.Event == "protocol_error" {
 		p.protocolFailure = fmt.Errorf("invalid engine protocol: %s", e.Data)

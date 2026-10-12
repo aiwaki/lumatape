@@ -141,7 +141,7 @@ func (a *application) openCandidate(next config.Config, target win32.Window) (*c
 // happens before replacing a working backend. A failed request is never
 // silently turned into Lightweight; only an Auto preference permits CPU fallback.
 func (a *application) ApplyDraft(next config.Config, selected ...win32.Window) error {
-	return a.applyPreferences(next, true, true, selected)
+	return a.applyPreferences(next, true, true, selected, false)
 }
 
 func (a *application) disableFilter() error {
@@ -155,7 +155,7 @@ func (a *application) disableFilter() error {
 	return a.ApplyDraft(next)
 }
 
-func (a *application) applyPreferences(next config.Config, explicitGeometry, persist bool, selected []win32.Window) (err error) {
+func (a *application) applyPreferences(next config.Config, explicitGeometry, persist bool, selected []win32.Window, reapplyWindow bool) (err error) {
 	defer func() {
 		if err != nil {
 			a.lastError = err.Error()
@@ -192,6 +192,15 @@ func (a *application) applyPreferences(next config.Config, explicitGeometry, per
 	if err != nil {
 		return err
 	}
+	if reapplyWindow {
+		if !explicitGeometry {
+			return errors.New(locale.Text("повторное изменение окна требует явного действия", "retrying a window resize requires an explicit action"))
+		}
+		plan, err = explicitWindowReapply(plan, next, a.RuntimeStatus().FormatActive && a.cfg.Aspect.Method == "window")
+		if err != nil {
+			return err
+		}
+	}
 	// Load/validate/compile before any OS mutation or capture replacement.
 	shader, ownsShader, err := a.prepareLiveShader(next)
 	if err != nil {
@@ -223,7 +232,23 @@ func (a *application) applyPreferences(next config.Config, explicitGeometry, per
 			return err
 		}
 	}
-	if target.Handle != a.target.Handle {
+	if plan.Source && next.Target.Kind == "window" && target.Handle != 0 && target.Handle == a.target.Handle && target.PID == a.target.PID {
+		// findTarget above has validated this live identity. A dynamic caption
+		// updates saved lookup metadata but is not permission to resize again.
+		hotkeys := plan.Hotkeys
+		plan, err = planResolvedSourceTransition(a.cfg, next, explicitGeometry, true)
+		if err != nil {
+			return err
+		}
+		plan.Hotkeys = hotkeys
+		if reapplyWindow {
+			plan, err = explicitWindowReapply(plan, next, a.RuntimeStatus().FormatActive && a.cfg.Aspect.Method == "window")
+			if err != nil {
+				return err
+			}
+		}
+	}
+	if target.Handle != a.target.Handle || target.PID != a.target.PID {
 		plan.Source, plan.Capture, plan.RestoreFormat = true, true, true
 		if explicitGeometry && next.Aspect.Enabled {
 			plan.ApplyWindow, plan.ApplySystem = next.Aspect.Method == "window", next.Aspect.Method == "system"
@@ -315,6 +340,11 @@ func (a *application) applyPreferences(next config.Config, explicitGeometry, per
 		a.shaderProgram = shader
 	}
 	ownsShader = false
+	// Preset edits and opening/closing the tray do not retry a failed capture.
+	// Explicit source/backend changes or the off/on control do.
+	if plan.Source || plan.Capture || plan.ApplyWindow || plan.ApplySystem || resumingCapture || previous.Enabled != next.Enabled {
+		a.captureRecovery.Reset()
+	}
 	a.cfg, a.target = next, target
 	a.resolvedTransfer = resolved
 	a.resetFrameMetrics()

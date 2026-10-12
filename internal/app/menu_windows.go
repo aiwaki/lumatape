@@ -267,5 +267,5 @@ func (a *application) reload() error {
 	if err != nil {
 		return err
 	}
-	return a.applyPreferences(next, false, false, nil)
+	return a.applyPreferences(next, false, false, nil, false)
 }

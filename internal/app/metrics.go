@@ -21,6 +21,7 @@ type FrameMetricSample struct {
 	TransferMS, FrameAgeMS              float64
 	PresentIntervalMS                   float64
 	GPUFresh, CaptureFresh, Presented   bool
+	CaptureAvailable                    bool // Full capture; false for Lightweight
 }
 
 // MetricPercentiles uses nearest-rank percentiles over the retained samples.
@@ -59,6 +60,7 @@ type metricFrame struct {
 // configurations otherwise remain explicitly part of the same recent window.
 type FrameMetrics struct {
 	warmupUntil time.Time
+	rates       frameRates
 	frames      [FrameMetricCapacity]metricFrame
 	next, count int
 }
@@ -68,7 +70,11 @@ func NewFrameMetrics(start time.Time) *FrameMetrics {
 }
 
 func (m *FrameMetrics) Observe(now time.Time, sample FrameMetricSample) {
-	if m == nil || now.Before(m.warmupUntil) {
+	if m == nil {
+		return
+	}
+	m.rates.observe(now, sample)
+	if now.Before(m.warmupUntil) {
 		return
 	}
 	m.frames[m.next] = metricFrame{at: now, sample: sample}

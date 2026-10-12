@@ -12,12 +12,15 @@ from pathlib import Path, PurePosixPath
 ROOT = Path(__file__).resolve().parent.parent
 ENGINE = ('lumatape-engine.exe', 'lumatape-watchdog.exe', 'lumatape-testcard.exe', 'glfw3.dll', 'lumatape_capture.dll')
 CAPTURE_EXPORTS = frozenset('vhs_capture_' + name for name in (
-    'abi_version', 'open', 'open_ex', 'get_stats', 'acquire', 'release', 'close'))
+    'abi_version', 'open', 'open_ex', 'get_stats', 'acquire', 'can_reuse_idle', 'release', 'close'))
 NATIVE_NOTICES = ('GLFW-LICENSE.md', 'Go-LICENSE.txt', 'cppwinrt-LICENSE.txt', 'MSVC-STL-LICENSE.txt')
 
 
 def check_capture_abi(path):
-    """Read PE exports without loading Windows code; reject stale GPU-only DLLs.
+    """Read PE exports without loading code; reject outdated capture DLLs.
+
+    The runtime can still open older ABI-v1 DLLs with reduced capabilities, but
+    a new distribution must contain the checked idle-frame reuse implementation.
 
     PE32+ layout: https://learn.microsoft.com/windows/win32/debug/pe-format
     This packaging check cannot replace executing the native ABI smoke test.
@@ -77,7 +80,7 @@ def check_capture_abi(path):
         exports.add(name.decode('ascii', errors='replace'))
     missing = CAPTURE_EXPORTS - exports
     if missing:
-        raise ValueError('Capture DLL lacks required CPU compatibility ABI exports: ' + ', '.join(sorted(missing)))
+        raise ValueError('Capture DLL lacks required package ABI exports: ' + ', '.join(sorted(missing)))
     return exports
 
 
@@ -144,8 +147,8 @@ def check_rust_licenses(directory):
 
 
 def copy_licenses(source, destination):
-    # The native tray does not embed the archived React panel. Its npm notices
-    # remain with that source and are not inputs to the product package.
+    # The local settings use plain JS and do not embed the archived React panel.
+    # Its npm notices remain with that source, outside the product package.
     files = check_rust_licenses(source)
     for name in NATIVE_NOTICES:
         path = source / 'native' / name
@@ -207,8 +210,8 @@ def package(args):
                       update_channel=update_channel,
                       updater=('unconfigured; no automatic network access' if update_channel == 'unconfigured'
                                else 'configured; signed update checks enabled; in-place installation disabled for this portable ZIP'),
-                      webview2='not required; native tray only',
-                      interface='Tauri native menu; no WebView window',
+                      webview2='required for settings; install Microsoft Edge WebView2 Runtime separately for this portable ZIP',
+                      interface='Tauri native tray and on-demand local settings; no settings window at first launch',
                       physical_gpu='not verified', instructions='docs/WINDOWS_VALIDATION.md')
         (stage / 'BUILD-STATUS.json').write_text(json.dumps(status, ensure_ascii=False, indent=2)+'\n', encoding='utf-8', newline='\n')
         files = sorted(p for p in stage.rglob('*') if p.is_file())

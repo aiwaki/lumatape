@@ -4,8 +4,9 @@
 
 ## Current application
 
-LumaTape uses a native Tauri tray. The React panel is not included in the app,
-and no WebView window is created.
+LumaTape uses a native Tauri tray and local HTML/CSS/JavaScript settings.
+A WebView is created only when settings open. The React panel is not included;
+current settings import no npm packages.
 
 * GLFW 3.4, zlib/libpng license: pinned commit `a74efa0d5628b74adc0426af4c5710e287fa7c2c`. CMake installs the upstream LICENSE.md beside distributed binaries.
 * Go runtime/standard library, BSD: license retained for the Go executables.
@@ -15,8 +16,9 @@ and no WebView window is created.
 
 These notices apply to the listed dependencies; the root MIT license covers
 LumaTape's own code. The Rust graph still includes Tauri's transitive dependencies,
-including `wry` and `webview2-com`. Their notices are retained even though
-the app does not create a WebView window.
+including `wry` and `webview2-com`, which the settings window uses; their notices
+are retained. Microsoft Edge WebView2 Runtime is installed separately from the
+portable ZIP; NSIS includes a bootstrapper to install it if needed.
 
 Windows SDK and MSVC build files remain external build-tool dependencies; their headers and import libraries are not vendored or included in the application bundle.
 

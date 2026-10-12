@@ -646,6 +646,9 @@ struct VhsCapture {
     int32_t acquire(VhsCaptureFrame& out) {
         check_context();
         require(!locked, "Release the previous capture texture before acquiring another frame");
+        // An empty frame pool is valid for static content, but not permission
+        // to keep displaying a texture after the capture device was removed.
+        winrt::check_hresult(device->GetDeviceRemovedReason());
         DWORD pid = 0;
         const DWORD target_tid = GetWindowThreadProcessId(hwnd, &pid);
         require(!source_closed->load() && IsWindow(hwnd) && pid == target_pid && target_tid == target_thread,
@@ -839,6 +842,23 @@ int32_t VHS_CALL vhs_capture_acquire(VhsCapture* capture, VhsCaptureFrame* frame
             capture->end_telemetry();
             throw;
         }
+    });
+}
+
+int32_t VHS_CALL vhs_capture_can_reuse_idle(VhsCapture* capture, char* error, uint32_t capacity) {
+    return boundary(error, capacity, [&]() -> int32_t {
+        require(capture != nullptr, "Capture handle is NULL");
+        capture->check_context();
+        require(capture->locked, "Idle reuse must be checked before releasing the acquired texture");
+        winrt::check_hresult(capture->device->GetDeviceRemovedReason());
+        DWORD pid = 0;
+        const DWORD tid = GetWindowThreadProcessId(capture->hwnd, &pid);
+        RECT current_client{};
+        return capture->valid_frame && !capture->pending_frame &&
+            !capture->source_closed->load() && IsWindow(capture->hwnd) &&
+            pid == capture->target_pid && tid == capture->target_thread &&
+            IsWindowVisible(capture->hwnd) && !IsIconic(capture->hwnd) &&
+            get_client(capture->hwnd, current_client) && EqualRect(&current_client, &capture->last_crop.client) ? 1 : 0;
     });
 }
 

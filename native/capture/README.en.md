@@ -114,6 +114,22 @@ QPC at acquire completion. It is the age of captured content, not total
 input-to-photon latency. `updated` and `serial` distinguish repeated textures.
 No performance or compatibility measurements are claimed by this source build.
 
+An empty WGC pool is normal: unchanged content may not produce new frames. The
+age of an already accepted texture therefore does not disable the effect by
+itself. The optional `vhs_capture_can_reuse_idle` export checks source identity,
+D3D11 device health, current geometry and absence of a pending CPU copy. The
+host reuses only a `serial` previously accepted fresh in the same session. Older
+DLLs without this export retain the age limit for every frame.
+
+A newly received frame older than 500 ms is hidden. Automatic recovery needs
+three distinct fresh frames spanning at least 100 ms, with frame ages and gaps
+no greater than 250 ms. Another stall within 10 seconds of recovery leaves the
+effect paused until an explicit off/on or source, backend or geometry change.
+Focus loss, source closure, API failure and device loss still hide the surface.
+An empty pool and healthy device cannot prove that WGC has not silently stalled:
+the API provides no separate signal to distinguish that condition from static
+content. This limitation remains.
+
 Captured cursors are explicitly disabled and read back. The capture bridge does not
 hide the system cursor. The OS capture border is left under system control.
 Current-process windows are rejected. Closing/reusing a source HWND is detected

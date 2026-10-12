@@ -85,3 +85,70 @@ func TestInvalidInputTransitionDoesNotProduceAnActionPlan(t *testing.T) {
 		t.Fatalf("built-in convex must allow projected cursor without input-mode changes: %v", err)
 	}
 }
+
+func TestWindowResizeRetryRequiresExplicitIntentAndIsIdempotent(t *testing.T) {
+	c := validFullConfig()
+	c.Aspect.Enabled, c.Aspect.Method = true, "window"
+	unchanged, err := planTransition(c, c, true)
+	if err != nil || unchanged.ApplyWindow || unchanged.RestoreFormat {
+		t.Fatalf("ordinary apply reasserted geometry: %+v %v", unchanged, err)
+	}
+	// A still-correct window must not visibly jump through original placement.
+	active, err := explicitWindowReapply(unchanged, c, true)
+	if err != nil || active != unchanged {
+		t.Fatalf("repeated button click disturbed active 4:3: %+v %v", active, err)
+	}
+	// Once the game overrides the size, only the separate button intent retries.
+	retry, err := explicitWindowReapply(unchanged, c, false)
+	if err != nil || !retry.ApplyWindow || !retry.RestoreFormat || retry.ApplySystem {
+		t.Fatalf("explicit resize did not recover an overridden format: %+v %v", retry, err)
+	}
+	for _, invalid := range []string{"off", "mask", "system", "monitor"} {
+		next := c
+		switch invalid {
+		case "off":
+			next.Aspect.Enabled = false
+		case "monitor":
+			next.Target.Kind = "monitor"
+		default:
+			next.Aspect.Method = invalid
+		}
+		if _, err := explicitWindowReapply(unchanged, next, false); err == nil {
+			t.Fatalf("window-retry flag accepted %s", invalid)
+		}
+	}
+}
+
+func TestDynamicGameTitleDoesNotReplayWindowOrDisplayFormat(t *testing.T) {
+	for _, method := range []string{"window", "system"} {
+		current := validFullConfig()
+		current.Target.WindowTitle = "Game — 60 FPS"
+		current.Aspect.Enabled, current.Aspect.Method = true, method
+		for _, preset := range config.PresetNames {
+			next := current
+			next.Target.WindowTitle, next.Preset = "Game — 59 FPS", preset
+			next.Effects, _ = config.Preset(preset)
+			for _, explicit := range []bool{false, true} {
+				p, err := planResolvedSourceTransition(current, next, explicit, true)
+				if err != nil || p.Source || p.Capture || p.RestoreFormat || p.ApplyWindow || p.ApplySystem {
+					t.Fatalf("same window %s/%s title update replayed geometry: %+v %v", method, preset, p, err)
+				}
+			}
+			p, err := planResolvedSourceTransition(current, next, true, false)
+			if err != nil || !p.Source || !p.Capture || !p.RestoreFormat {
+				t.Fatalf("different source identity was ignored: %+v %v", p, err)
+			}
+		}
+		// Title normalization must not erase an independently requested format,
+		// backend or hotkey change in the same draft.
+		next := current
+		next.Target.WindowTitle = "Game — new level"
+		next.Aspect.Enabled = false
+		next.Capture.Transfer = config.TransferCompatibility
+		next.Hotkeys.Toggle = "Ctrl+Shift+9"
+		p, err := planResolvedSourceTransition(current, next, true, true)
+		if err != nil || p.Source || !p.Capture || !p.Hotkeys || !p.RestoreFormat || p.ApplyWindow || p.ApplySystem {
+			t.Fatalf("title normalization lost another explicit change: %+v %v", p, err)
+		}
+	}
+}

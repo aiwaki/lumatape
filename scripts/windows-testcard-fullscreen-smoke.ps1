@@ -39,13 +39,15 @@ public static class LumaTestcardFullscreenProbe {
  [StructLayout(LayoutKind.Sequential)] public struct Rect { public int Left,Top,Right,Bottom; }
  [StructLayout(LayoutKind.Sequential)] public struct Placement { public uint Length,Flags,ShowCommand;public Point Minimum,Maximum;public Rect Normal; }
  [StructLayout(LayoutKind.Sequential)] struct MonitorInfo { public uint Size;public Rect Monitor,Work;public uint Flags; }
- public class Snapshot { public string HWND,Monitor;public uint PID,Style,ExStyle,DPI;public bool Visible,Maximized,Minimized,Fullscreen;public Rect Window,ClientScreen,MonitorBounds,WorkBounds;public Placement Placement; }
+ public class Snapshot { public string HWND,Monitor,FullscreenButton;public uint PID,Style,ExStyle,DPI;public bool Visible,Maximized,Minimized,Fullscreen;public Rect Window,ClientScreen,MonitorBounds,WorkBounds;public Placement Placement; }
  public class MessageCall { public bool Completed;public int Win32Error;public uint TimeoutMs;public double ElapsedMs;public string Result; }
  public delegate bool EnumProc(IntPtr hwnd,IntPtr value);
  [DllImport("user32.dll",SetLastError=true)] static extern bool EnumWindows(EnumProc callback,IntPtr value);
  [DllImport("user32.dll")] static extern bool IsWindow(IntPtr hwnd);
  [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr hwnd,out uint pid);
  [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetClassNameW(IntPtr hwnd,StringBuilder name,int size);
+ [DllImport("user32.dll",CharSet=CharSet.Unicode)] static extern int GetWindowTextW(IntPtr hwnd,StringBuilder name,int size);
+ [DllImport("user32.dll",SetLastError=true)] static extern bool SetWindowPos(IntPtr hwnd,IntPtr after,int x,int y,int width,int height,uint flags);
  [DllImport("user32.dll",SetLastError=true)] static extern bool GetWindowRect(IntPtr hwnd,out Rect rect);
  [DllImport("user32.dll",SetLastError=true)] static extern bool GetClientRect(IntPtr hwnd,out Rect rect);
  [DllImport("user32.dll",SetLastError=true)] static extern bool ClientToScreen(IntPtr hwnd,ref Point point);
@@ -93,7 +95,8 @@ public static class LumaTestcardFullscreenProbe {
    var info=new MonitorInfo{Size=(uint)Marshal.SizeOf(typeof(MonitorInfo))};Require(GetMonitorInfoW(monitor,ref info),"GetMonitorInfoW");
    uint style=unchecked((uint)GetWindowLongW(hwnd,-16)),exStyle=unchecked((uint)GetWindowLongW(hwnd,-20));
    bool visible=IsWindowVisible(hwnd),minimized=IsIconic(hwnd);
-   return new Snapshot{HWND="0x"+hwnd.ToInt64().ToString("x"),Monitor="0x"+monitor.ToInt64().ToString("x"),PID=expectedPID,
+   var buttonText=new StringBuilder(256);GetWindowTextW(GetDlgItem(hwnd,1001),buttonText,buttonText.Capacity);
+   return new Snapshot{HWND="0x"+hwnd.ToInt64().ToString("x"),Monitor="0x"+monitor.ToInt64().ToString("x"),FullscreenButton=buttonText.ToString(),PID=expectedPID,
     Style=style,ExStyle=exStyle,DPI=GetDpiForWindow(hwnd),Visible=visible,Maximized=IsZoomed(hwnd),Minimized=minimized,
     Window=window,ClientScreen=clientScreen,MonitorBounds=info.Monitor,WorkBounds=info.Work,Placement=placement,
     Fullscreen=visible&&!minimized&&(style&0x00c40000u)==0&&(exStyle&8u)==0&&Equal(window,info.Monitor)&&Equal(clientScreen,info.Monitor)};
@@ -103,6 +106,18 @@ public static class LumaTestcardFullscreenProbe {
   return before.Visible==after.Visible&&before.Maximized==after.Maximized&&before.Minimized==after.Minimized&&
    before.Style==after.Style&&before.ExStyle==after.ExStyle&&Equal(before.Window,after.Window)&&Equal(before.ClientScreen,after.ClientScreen)&&
    before.Placement.ShowCommand==after.Placement.ShowCommand&&Equal(before.Placement.Normal,after.Placement.Normal);
+ }
+ public static void ResizeOwnBorderless43(IntPtr hwnd,uint expectedPID){
+  Verify(hwnd,expectedPID);var before=Read(hwnd,expectedPID);
+  if(!before.Fullscreen)throw new Exception("Resize probe requires its own fullscreen testcard");
+  int unit=Math.Min((before.WorkBounds.Right-before.WorkBounds.Left)/4,(before.WorkBounds.Bottom-before.WorkBounds.Top)/3)/2;
+  if(unit<1)throw new Exception("Monitor is too small for resize probe");
+  int width=unit*4,height=unit*3;
+  int x=before.WorkBounds.Left+(before.WorkBounds.Right-before.WorkBounds.Left-width)/2;
+  int y=before.WorkBounds.Top+(before.WorkBounds.Bottom-before.WorkBounds.Top-height)/2;
+  IntPtr previous=SetThreadDpiAwarenessContext(new IntPtr(-4));Require(previous!=IntPtr.Zero,"Set resize probe DPI");
+  try{Require(SetWindowPos(hwnd,IntPtr.Zero,x,y,width,height,0x4u|0x10u),"Resize own borderless HWND to 4:3");}
+  finally{Require(SetThreadDpiAwarenessContext(previous)!=IntPtr.Zero,"Restore resize probe DPI");}
  }
  public static void Send(IntPtr hwnd,uint expectedPID,uint message,uint key,long flags){
   Verify(hwnd,expectedPID);UIntPtr result;
@@ -249,6 +264,24 @@ public static class LumaTestcardFullscreenProbe {
  Click-FullscreenButton $normal 'BM_CLICK fullscreen to normal'
  $buttonRestore=Wait-State $normal {param($s) [LumaTestcardFullscreenProbe]::SameRestored($before,$s)} 'button-normal'
  Check 'Native button fullscreen round trip' ([LumaTestcardFullscreenProbe]::SameRestored($before,$buttonRestore)) 'BM_CLICK on exact PID/class/parent control ID 1001 enters and restores; not physical mouse delivery'
+
+ Send-Key $normal 0x7a
+ [void](Wait-State $normal {param($s) $s.Fullscreen} 'external-resize-before')
+ [LumaTestcardFullscreenProbe]::ResizeOwnBorderless43($normal.Window,$normal.ID)
+ $reduced=Wait-State $normal {param($s) -not $s.Fullscreen -and $s.FullscreenButton.Contains('F11')} 'external-resize-43'
+ Check 'External 4:3 resize updates fullscreen control' (($reduced.ClientScreen.Right-$reduced.ClientScreen.Left)*3 -eq ($reduced.ClientScreen.Bottom-$reduced.ClientScreen.Top)*4) 'Reduced borderless HWND is 4:3 and its button offers F11, without forcing it back to fullscreen'
+ Send-Key $normal 0x7a
+ [void](Wait-State $normal {param($s) $s.Fullscreen -and $s.FullscreenButton.Contains('Esc')} 'F11-after-external-resize')
+ Send-Key $normal 0x1b
+ $resizeRestored=Wait-State $normal {param($s) [LumaTestcardFullscreenProbe]::SameRestored($before,$s)} 'external-resize-original-restored'
+ Check 'F11 after external resize preserves original restore point' ([LumaTestcardFullscreenProbe]::SameRestored($before,$resizeRestored)) 'F11 refills the monitor; Escape returns to the original framed window, not the reduced borderless rectangle'
+ Send-Key $normal 0x7a
+ [void](Wait-State $normal {param($s) $s.Fullscreen} 'direct-escape-resize-before')
+ [LumaTestcardFullscreenProbe]::ResizeOwnBorderless43($normal.Window,$normal.ID)
+ [void](Wait-State $normal {param($s) -not $s.Fullscreen -and $s.FullscreenButton.Contains('F11')} 'direct-escape-resize-43')
+ Send-Key $normal 0x1b
+ [void](Wait-State $normal {param($s) [LumaTestcardFullscreenProbe]::SameRestored($before,$s)} 'direct-escape-original-restored')
+ Check 'Escape after external resize restores original window' $true 'Saved placement remains owned even when the HWND no longer covers the monitor'
 
  Send-Message $normal 0x112 0xf030 0 # WM_SYSCOMMAND / SC_MAXIMIZE
  $maximized=Wait-State $normal {param($s) $s.Maximized -and -not $s.Fullscreen} 'maximized-before'

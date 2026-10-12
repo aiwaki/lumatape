@@ -62,6 +62,8 @@ int main() {
     frame.struct_size = sizeof(frame);
     if (!check(vhs_capture_acquire(nullptr, &frame, error.data(), static_cast<uint32_t>(error.size())) == -1,
         "acquire rejects a null handle") ||
+        !check(vhs_capture_can_reuse_idle(nullptr, error.data(), static_cast<uint32_t>(error.size())) == -1,
+        "idle reuse rejects a null handle") ||
         !check(vhs_capture_release(nullptr, nullptr, 0) == -1, "release rejects a null handle") ||
         !check(vhs_capture_close(nullptr, nullptr, 0) == -1, "close rejects a null handle pointer")) return 1;
     std::puts("Capture DLL ABI, exports and failure boundaries passed (no GPU/runtime qualification).");

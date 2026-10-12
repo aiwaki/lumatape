@@ -56,7 +56,7 @@ func TestCursorAlphaPreservesColorAndMonochromeMasks(t *testing.T) {
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
-			if err := composeCursorAlpha(tc.b, tc.w); err != nil {
+			if err := composeCursorAlpha(tc.b, tc.w, 1); err != nil {
 				t.Fatal(err)
 			}
 			for i := range tc.b {
@@ -66,10 +66,8 @@ func TestCursorAlphaPreservesColorAndMonochromeMasks(t *testing.T) {
 			}
 		})
 	}
-	if composeCursorAlpha([]byte{255, 255, 255, 0}, []byte{0, 0, 0, 0}) == nil {
-		t.Fatal("XOR cursor silently corrupted")
-	}
-	if composeCursorAlpha([]byte{0}, []byte{0}) == nil {
+
+	if composeCursorAlpha([]byte{0}, []byte{0}, 1) == nil {
 		t.Fatal("badbuffer accepted")
 	}
 }

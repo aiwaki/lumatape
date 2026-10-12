@@ -44,7 +44,7 @@ type application struct {
 	visible, suspended, quit            bool
 	terminalError                       error
 	abandonGPU                          bool
-	captureStale                        bool
+	captureRecovery                     captureRecoveryGate
 	displaySession                      *display.Session
 	confirmationDeadline                time.Time
 	windowRestore                       *windowChange
@@ -67,6 +67,7 @@ type application struct {
 	snapshotAfter                       int
 	snapshotDone                        bool
 	sourceMotion                        sourceMotionGate
+	sourcePauseReason                   sourceAlignment
 	sourceMotionPaused                  bool
 	settings                            *win32.SettingsWindow
 	settingsLastRefresh                 time.Time
@@ -103,6 +104,8 @@ type application struct {
 	pointerSession                      *pointer.Session
 	pointerEngaged                      bool
 	pointerFailure                      error
+	lastPointerFailure                  string
+	lastPointerFailureAt                time.Time
 	pointerTarget                       win32.Window
 	pointerSourceCreated                uint64
 }
@@ -400,7 +403,7 @@ func Run(args []string) (err error) {
 		// Persist a preference, never replay display/window mutations on startup.
 		a.cfg.Aspect.Enabled = false
 		if c.Aspect.Method == "window" {
-			a.issue(locale.Text("Формат 4:3", "4:3 format"), locale.Text("Изменение размера окна 4:3 убрано из меню. Выберите пропорции в настройках самой игры.", "4:3 window resizing was removed from the menu. Choose proportions in the game settings."))
+			a.issue(locale.Text("Формат 4:3", "4:3 format"), locale.Text("Чтобы снова изменить окно до 4:3, выберите этот формат в настройках. При запуске размер окна не меняется автоматически.", "Choose Window 4:3 in settings to resize the window again. Startup does not change window size automatically."))
 		} else {
 			a.issue(locale.Text("Формат 4:3", "4:3 format"), locale.Text("Изменение видеорежима применяется только вручную через меню трея.", "Display mode changes require a manual action in the tray menu."))
 		}
@@ -576,16 +579,22 @@ func (a *application) RuntimeStatus() RuntimeStatus {
 		Enabled: a.cfg.Enabled, EffectiveIntensity: a.cfg.Effective().Intensity,
 		GPU: a.gpuCapability, Compatibility: a.cpuCapability, FormatMethod: a.cfg.Aspect.Method,
 		FormatRequested: a.cfg.Aspect.Enabled, RecoveryPending: a.windowRecoveryError != nil || a.displayTerminalSeen || (a.windowRestore != nil && a.windowRestore.transaction.recoveryOnly)}
+	if a.cfg.Target.Kind == "window" && win32.SameProcess(a.target.Handle, a.target.PID) {
+		if client, err := win32.ClientBounds(a.target.Handle); err == nil && client.W > 0 && client.H > 0 {
+			s.SourceClient = &SourceClientBounds{X: client.X, Y: client.Y, Width: client.W, Height: client.H}
+		}
+	}
 	if a.cfg.Aspect.Enabled {
 		switch a.cfg.Aspect.Method {
 		case "mask":
 			s.FormatActive = a.visible
 		case "window":
-			s.FormatActive = a.windowRestore != nil && a.windowRestore.transaction.active && !a.windowRestore.transaction.recoveryOnly
-			if s.FormatActive {
-				r := a.windowRestore.target
-				client, err := win32.ClientBounds(r.Handle)
-				s.FormatActive = err == nil && win32.SameProcess(r.Handle, r.PID) && client.W > 0 && client.H > 0 && client.W*3 == client.H*4
+			if a.windowRestore != nil && a.windowRestore.target.Handle == a.target.Handle && s.SourceClient != nil {
+				client := s.SourceClient
+				s.FormatActive = a.windowRestore.transaction.formatActive(geometry.Rect{X: client.X, Y: client.Y, W: client.Width, H: client.Height})
+			}
+			if !s.FormatActive {
+				s.FormatReason = locale.Text("Окно не имеет применённого формата 4:3. Повторите «Окно 4:3», если игра изменила размер.", "Window 4:3 is not applied. Select Window 4:3 again if the game changed its size.")
 			}
 		case "system":
 			s.FormatActive = a.displaySession != nil && !a.displayTerminalSeen
@@ -599,6 +608,7 @@ func (a *application) RuntimeStatus() RuntimeStatus {
 		}
 	}
 	s.Unsaved = a.unsaved
+	s.CaptureRecovery = a.captureRecovery.Status()
 	s.Metrics, s.MetricsUpdatedAt = a.metricSummary, a.metricSummaryAt
 	s.LastFrameAt, s.CPUWorkMS = a.lastFrameAt, a.cpuWorkMS
 	if !a.gpuObservedAt.IsZero() {
@@ -630,6 +640,7 @@ func (a *application) RuntimeStatus() RuntimeStatus {
 		}
 	}
 	s.observePresentation(a.visible && a.window != nil && win32.Visible(a.window.HWND), a.suspended)
+	s.FrameRates = a.metrics.FrameRates(time.Now(), s.SurfaceVisible && !a.suspended)
 	return s
 }
 func (a *application) save() error {
@@ -665,6 +676,7 @@ func (a *application) hide() {
 	}
 }
 func (a *application) closeCapture() error {
+	a.captureRecovery.Suspend()
 	if a.capture == nil {
 		return nil
 	}
@@ -678,7 +690,6 @@ func (a *application) closeCapture() error {
 	a.transferStatsSerial = 0
 	a.transferStatsObservedAt = time.Time{}
 	a.captureAcquireMS = 0
-	a.captureStale = false
 	return nil
 }
 
@@ -790,6 +801,10 @@ func (a *application) frame() error {
 			return nil
 		}
 	}
+	if a.captureRecovery.Status().State == "blocked" {
+		a.hideForCaptureRecovery()
+		return a.finishCaptureRecoveryPause()
+	}
 	if a.controllerPID != 0 && win32.SameProcess(win32.Foreground(), a.controllerPID) {
 		a.hide()
 		a.setPhase("paused-settings", locale.Text("Открыты настройки LumaTape; вернитесь в игру, чтобы увидеть эффект", "LumaTape settings are open; return to the game to see the effect"))
@@ -809,11 +824,14 @@ func (a *application) frame() error {
 	}
 	source := m.Bounds
 	if a.cfg.Target.Kind == "window" {
-		if !win32.Visible(a.target.Handle) || win32.Foreground() != a.target.Handle {
-			a.hide()
-			a.setPhase("paused-focus", locale.Text("Вернитесь в окно игры, чтобы увидеть эффект", "Return to the game window to see the effect"))
+		visible, foreground := win32.Visible(a.target.Handle), win32.Foreground() == a.target.Handle
+		if !visible || !foreground {
 			a.sourceMotion.Reset()
-			return a.closeCapture()
+			reason := sourceUnfocused
+			if !visible {
+				reason = sourceHidden
+			}
+			return a.pauseForSource(reason)
 		}
 		source, e = win32.ClientBounds(a.target.Handle)
 		if e != nil {
@@ -825,12 +843,17 @@ func (a *application) frame() error {
 			return nil
 		}
 		if a.cfg.Mode == "full" {
+			a.captureRecovery.ObserveSourceSize(source.Size())
 			moving, err := win32.InMoveSize(a.target.Handle)
 			if err != nil {
 				return err
 			}
 			if !a.sourceMotion.Observe(a.target.Handle, source, moving, time.Now()) {
-				return a.pauseForSourceMotion()
+				reason := sourceSettling
+				if moving {
+					reason = sourceMoving
+				}
+				return a.pauseForSource(reason)
 			}
 		}
 	}
@@ -839,10 +862,25 @@ func (a *application) frame() error {
 		return fmt.Errorf(locale.Text("пользовательский шейдер не загружен", "custom shader is not loaded"))
 	}
 	var captured capture.Frame
+	var capturedAt time.Time
+	var idleReuse bool
 	begin := time.Now()
 	if full {
 		if a.library == nil || a.cfg.Target.Kind != "window" {
 			return errors.New(locale.Text("Full требует доступную capture DLL и выбранное окно игры", "Full requires an available capture DLL and a selected game window"))
+		}
+		pointerPresentation, err := calculatePresentation(a.cfg, source, m.Bounds)
+		if err != nil {
+			return err
+		}
+		if paused, err := a.pauseProjectedSourceOutsideDesktop(pointerPresentation, source.Size()); paused {
+			return err
+		}
+		if err := a.prepareProjectedPointer(pointerPresentation, source.Size()); err != nil {
+			return err
+		}
+		if a.projectedPointerFailed() {
+			return nil
 		}
 		if a.capture == nil {
 			a.hide()
@@ -864,6 +902,7 @@ func (a *application) frame() error {
 		var ready bool
 		acquireStarted := time.Now()
 		captured, ready, e = a.capture.Acquire()
+		capturedAt = time.Now()
 		acquireElapsed := time.Since(acquireStarted)
 		a.captureAcquireMS = float64(acquireElapsed.Nanoseconds()) / 1e6
 		// Snapshot completed-transfer stats before the stale branch can reject
@@ -886,34 +925,33 @@ func (a *application) frame() error {
 			a.setPhase("waiting-frame", locale.Text("Ожидается новый кадр Windows Graphics Capture", "Waiting for a new Windows Graphics Capture frame"))
 			return nil
 		}
+		if captured.Updated == 0 {
+			idleReuse, e = a.capture.CanReuseIdleFrame()
+			if e != nil {
+				return errors.Join(e, a.capture.Release())
+			}
+		}
 		capturedBounds := geometry.Rect{X: int(captured.X), Y: int(captured.Y), W: int(captured.Width), H: int(captured.Height)}
-		aligned, err := a.fullSourceAligned(source, capturedBounds)
+		aligned, err := a.fullSourceAlignment(source, capturedBounds)
 		if err != nil {
 			return errors.Join(err, a.capture.Release())
 		}
-		if !aligned {
+		if aligned != sourceAligned {
 			// Acquire transferred texture ownership even when its coordinates
 			// became obsolete during a CPU readback or GPU interop wait.
 			if err := a.capture.Release(); err != nil {
 				return err
 			}
-			return a.pauseForSourceMotion()
+			return a.pauseForSource(aligned)
 		}
-		// Do not leave an opaque frozen picture above an interactive game if
-		// WGC stalls. Static sources may also stop producing frames; showing the
-		// original until a fresh frame is safer than concealing a changed source.
-		if captured.Age100ns > 5000000 {
-			a.hide()
-			a.setPhase("paused-stale", locale.Text("Захват не обновляется; показано исходное окно", "Capture is not updating; showing the original window"))
-			if !a.captureStale {
-				a.captureStale = true
-				data := a.captureObservation(captured, true)
-				data["age_ms"] = float64(captured.Age100ns) / 1e4
-				a.record("stale_capture_hidden", data)
+		// Reject delayed new frames; native-validated idle repeats retain their
+		// accepted content. A rapid second real stall stays paused until retry.
+		if !a.captureFrameUsable(captured, captured.Updated != 0, time.Duration(captured.Age100ns)*100*time.Nanosecond, capturedAt, idleReuse) {
+			if err := a.capture.Release(); err != nil {
+				return err
 			}
-			return a.capture.Release()
+			return a.finishCaptureRecoveryPause()
 		}
-		a.captureStale = false
 		// Keep the independently observed source bounds. The captured bounds
 		// have now been checked, never used to move the overlay backwards.
 		a.ageMS = float64(captured.Age100ns) / 1e4
@@ -962,12 +1000,12 @@ func (a *application) frame() error {
 		return e
 	}
 	if full {
-		aligned, err := a.fullSourceAligned(source, source)
+		aligned, err := a.fullSourceAlignment(source, source)
 		if err != nil {
 			return err
 		}
-		if !aligned {
-			return a.pauseForSourceMotion()
+		if aligned != sourceAligned {
+			return a.pauseForSource(aligned)
 		}
 	}
 	a.cpuWorkMS = float64(time.Since(begin).Nanoseconds()) / 1e6
@@ -981,19 +1019,39 @@ func (a *application) frame() error {
 		a.record("snapshot", map[string]any{"path": a.snapshotPath, "mode": "full", "capture_transfer": a.resolvedConfig().Capture.Transfer, "requested_transfer": a.cfg.Capture.Transfer, "shader_id": a.cfg.Shader.ID, "source_serial": captured.Serial, "width": w, "height": h, "preset": a.cfg.Preset, "intensity": a.cfg.Effects.Intensity, "frame": a.frameCount + 1, "capture_age_ms": a.ageMS})
 		// Explicit PNG encoding can take much longer than an ordinary frame.
 		// The source may have moved while that diagnostic was being written.
-		aligned, err := a.fullSourceAligned(source, source)
+		aligned, err := a.fullSourceAlignment(source, source)
 		if err != nil {
 			return err
 		}
-		if !aligned {
-			return a.pauseForSourceMotion()
+		if aligned != sourceAligned {
+			return a.pauseForSource(aligned)
 		}
+	}
+	// Driver work (or an explicit snapshot) may itself have consumed the age
+	// budget. Never re-show an already expired frame after that work returns.
+	if full && !a.captureFrameUsable(captured, false, time.Duration(captured.Age100ns)*100*time.Nanosecond+time.Since(capturedAt), time.Now(), idleReuse && time.Since(capturedAt) <= captureMaxAge) {
+		return a.finishCaptureRecoveryPause()
 	}
 	// The first complete valid buffer is prepared before the surface is shown.
 	if e = a.window.Swap(); e != nil {
 		return e
 	}
 	presentedAt := time.Now()
+	if full {
+		// SwapBuffers can block inside the driver. Recheck before showing the
+		// surface or renewing cursor projection after that native call returns.
+		aligned, err := a.fullSourceAlignment(source, source)
+		if err != nil {
+			return err
+		}
+		if aligned != sourceAligned {
+			return a.pauseForSource(aligned)
+		}
+		checkedAt := time.Now()
+		if !a.captureFrameUsable(captured, false, time.Duration(captured.Age100ns)*100*time.Nanosecond+checkedAt.Sub(capturedAt), checkedAt, idleReuse && checkedAt.Sub(capturedAt) <= captureMaxAge) {
+			return a.finishCaptureRecoveryPause()
+		}
+	}
 	a.observeFrameMetrics(presentedAt, captured, full, wroteSnapshot)
 	if a.pacer.Presented(presentedAt) {
 		a.api.DisableVSync()
@@ -1010,11 +1068,22 @@ func (a *application) frame() error {
 	if a.projectedPointerFailed() {
 		return nil
 	}
+	// First-time cursor worker initialization may take longer than a frame.
+	// Its successful handshake cannot make that old image safe to show again.
+	if full {
+		checkedAt := time.Now()
+		if !a.captureFrameUsable(captured, false, time.Duration(captured.Age100ns)*100*time.Nanosecond+checkedAt.Sub(capturedAt), checkedAt, idleReuse && checkedAt.Sub(capturedAt) <= captureMaxAge) {
+			return a.finishCaptureRecoveryPause()
+		}
+	}
 	if !a.visible || !win32.Visible(a.window.HWND) {
 		a.window.Show()
 		a.visible = true
 	}
-	if full && a.sourceMotionPaused {
+	if full {
+		a.captureFramePresented(captured, time.Now())
+	}
+	if a.sourceMotionPaused {
 		a.sourceMotionPaused = false
 		a.record("source_alignment_resumed", map[string]any{"bounds": source, "source_serial": captured.Serial})
 	}
@@ -1054,29 +1123,40 @@ func (a *application) frame() error {
 
 // Recheck after slow capture/upload and again after drawing. A frame can only
 // be presented over the same client rectangle that was observed before acquire.
-func (a *application) fullSourceAligned(before, captured geometry.Rect) (bool, error) {
-	if !win32.Visible(a.target.Handle) || win32.Foreground() != a.target.Handle {
+func (a *application) fullSourceAlignment(before, captured geometry.Rect) (sourceAlignment, error) {
+	visible, foreground := win32.Visible(a.target.Handle), win32.Foreground() == a.target.Handle
+	if !visible || !foreground {
 		a.sourceMotion.Reset()
-		return false, nil
+		return classifySourceAlignment(visible, foreground, false, false, before, captured, geometry.Rect{}), nil
 	}
 	moving, err := win32.InMoveSize(a.target.Handle)
 	if err != nil {
-		return false, err
+		return "", err
 	}
 	current, err := win32.ClientBounds(a.target.Handle)
 	if err != nil {
-		return false, err
+		return "", err
 	}
+	a.captureRecovery.ObserveSourceSize(current.Size())
 	stable := a.sourceMotion.Observe(a.target.Handle, current, moving, time.Now())
-	return stable && sourceGeometryMatches(before, captured, current), nil
+	return classifySourceAlignment(true, true, moving, stable, before, captured, current), nil
 }
 
-func (a *application) pauseForSourceMotion() error {
+func (a *application) pauseForSource(reason sourceAlignment) error {
 	a.hide()
-	a.setPhase("paused-moving", locale.Text("Источник перемещается или меняет размер; показано исходное окно", "Source is moving or resizing; showing the original window"))
-	if !a.sourceMotionPaused {
-		a.sourceMotionPaused = true
-		a.record("source_alignment_paused", "Source is moving, resizing, unfocused, or has not settled; showing the original window until a fresh aligned capture is available")
+	phase := "paused-moving"
+	message := locale.Text("Источник перемещается или меняет размер; показано исходное окно", "Source is moving or resizing; showing the original window")
+	if reason == sourceUnfocused || reason == sourceHidden {
+		phase = "paused-focus"
+		message = locale.Text("Вернитесь в окно игры, чтобы увидеть эффект", "Return to the game window to see the effect")
+		if reason == sourceHidden {
+			message = locale.Text("Окно игры скрыто или свёрнуто; откройте его, чтобы увидеть эффект", "The game window is hidden or minimized; open it to see the effect")
+		}
+	}
+	a.setPhase(phase, message)
+	if !a.sourceMotionPaused || a.sourcePauseReason != reason {
+		a.sourceMotionPaused, a.sourcePauseReason = true, reason
+		a.record("source_alignment_paused", map[string]any{"cause": reason})
 	}
 	// Reopening discards both the old capture image and any pending CPU copy.
 	return a.closeCapture()
@@ -1203,7 +1283,8 @@ func (a *application) applyWindow43() error {
 	a.sourceMotion.Reset()
 	a.cfg.Aspect.Enabled = true
 	a.cfg.Aspect.Method = "window"
-	a.issue(locale.Text("Клиентская область 4:3", "4:3 client area"), locale.Text("Окно размещено в рабочей области вместе с заголовком. В игре выберите разрешение 4:3: изменение окна не гарантирует правильный FOV.", "The window and title bar fit within the work area. Select a 4:3 resolution in the game: window resizing does not guarantee correct FOV."))
+	a.record("window_format_applied", map[string]any{"width": area.W, "height": area.H})
+	a.issue(locale.Text("Клиентская область 4:3", "4:3 client area"), fmt.Sprintf(locale.Text("Окно: %d×%d, вместе с рамкой помещается на мониторе. Если игра растягивает картинку, выберите 4:3 и в её настройках.", "Window: %d×%d; it fits the monitor with its frame. If the game stretches the image, choose 4:3 in its settings too."), area.W, area.H))
 	return nil
 }
 func (a *application) applySystem43() error {

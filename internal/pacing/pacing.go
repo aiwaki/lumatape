@@ -35,7 +35,7 @@ func (p *Pacer) UsingTimer() bool { return p.timer }
 // In timer mode the caller waits for this duration using an event-aware wait,
 // pumps events and checks Delay again before drawing. It must not spin, and
 // must round any conversion to a coarser wait unit upward. New events may wake
-// the wait early; repeated calls do not move an existing deadline.
+// the wait early; repeated early calls do not move an existing deadline.
 func (p *Pacer) Delay(now time.Time) time.Duration {
 	if !p.timer {
 		return 0
@@ -46,6 +46,9 @@ func (p *Pacer) Delay(now time.Time) time.Duration {
 	if remaining := p.next.Sub(now); remaining > 0 {
 		return remaining
 	}
+	// Start the next budget at the actual wake-up time. A late event-loop wake
+	// must not leave deadlines in the past that allow a burst of catch-up frames.
+	p.next = now
 	return 0
 }
 
@@ -54,9 +57,11 @@ func (p *Pacer) Delay(now time.Time) time.Duration {
 // that swap control is not pacing this loop. Only that transition returns true;
 // the caller must then disable swap control before using the timer path.
 //
-// Timer deadlines advance from the prior target so rendering work is part of
-// the frame budget. When late, missed deadlines are discarded instead of
-// rendering a burst of old frames. Reset after hiding/resizing before resuming.
+// Timer deadlines include rendering work in the frame budget. When the work
+// consumes the entire budget, the next frame is eligible immediately: waiting
+// another interval would charge the rendering cost twice. Delay anchors the
+// next budget to its actual start, so a late frame never creates a catch-up
+// burst. Reset after hiding/resizing before resuming.
 func (p *Pacer) Presented(now time.Time) (switched bool) {
 	if p.timer {
 		if p.next.IsZero() || (!p.lastPresented.IsZero() && now.Before(p.lastPresented)) {
@@ -64,7 +69,7 @@ func (p *Pacer) Presented(now time.Time) (switched bool) {
 		} else {
 			p.next = p.next.Add(p.interval)
 			if !p.next.After(now) {
-				p.next = now.Add(p.interval)
+				p.next = now
 			}
 		}
 		p.lastPresented = now

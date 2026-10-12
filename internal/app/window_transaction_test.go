@@ -175,3 +175,67 @@ func TestInvalidWindowFormatNeverMutatesSource(t *testing.T) {
 		}
 	}
 }
+
+func TestWindowFormatStatusFollowsActualClientWithoutResizeFighting(t *testing.T) {
+	f := freshWindowMutation()
+	tx, err := beginWindowTransaction(f, geometry.Rect{X: -1800, Y: -120, W: 1280, H: 960})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, client := range []geometry.Rect{
+		{X: -1800, Y: -120, W: 1280, H: 960},
+		{X: -1700, Y: 0, W: 1280, H: 960}, // move keeps 4:3
+		{W: 3440, H: 1440},                // maximized ultrawide
+		{W: 5120, H: 1440},
+		{W: 1280, H: 1024}, // 5:4 is not 4:3
+		{},                 // unavailable/minimized client
+	} {
+		want := client.W > 0 && client.H > 0 && client.W*3 == client.H*4
+		if got := tx.formatActive(client); got != want {
+			t.Fatalf("actual client %+v: active=%t, want=%t", client, got, want)
+		}
+		if f.mutations != 1 || f.restores != 0 {
+			t.Fatal("reading format state tried to enforce a previous size")
+		}
+	}
+	tx.recoveryOnly = true
+	if tx.formatActive(geometry.Rect{W: 1280, H: 960}) {
+		t.Fatal("unconfirmed restoration reported applied format")
+	}
+	var absent *windowTransaction
+	if absent.formatActive(geometry.Rect{W: 1280, H: 960}) {
+		t.Fatal("missing transaction reported applied format")
+	}
+}
+
+func TestWindowRestoreRespectsChangedClientWithinSameOuterBounds(t *testing.T) {
+	f := &durableWindowFake{fakeWindowMutation: freshWindowMutation()}
+	tx, err := beginWindowTransaction(f, geometry.Rect{W: 960, H: 720})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.client.H -= 10 // a game changes decorations without changing the outer RECT
+	outer, client := f.outer, f.client
+	if err := tx.Restore(); err != nil {
+		t.Fatal(err)
+	}
+	if f.restores != 0 || f.outer != outer || f.client != client || tx.active || !f.cleared {
+		t.Fatal("restoration overwrote a later client-area change")
+	}
+}
+
+func TestWindowRestoreKeepsRecoveryWhenClientCannotBeVerified(t *testing.T) {
+	f := &durableWindowFake{fakeWindowMutation: freshWindowMutation()}
+	tx, err := beginWindowTransaction(f, geometry.Rect{W: 960, H: 720})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.clientErr = true
+	if err := tx.Restore(); err == nil || !tx.active || f.cleared || f.restores != 0 {
+		t.Fatal("unknown client geometry was silently restored or forgotten")
+	}
+	f.clientErr = false
+	if err := tx.Restore(); err != nil || tx.active || !f.cleared || f.restores != 1 {
+		t.Fatalf("retry did not finish confirmed restoration: %v", err)
+	}
+}

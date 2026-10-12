@@ -89,15 +89,74 @@ func TestLateFrameDoesNotCatchUp(t *testing.T) {
 	p := New(10*time.Millisecond, false)
 	p.Delay(epoch)
 	p.Presented(epoch.Add(43 * time.Millisecond))
-	if d := p.Delay(epoch.Add(43 * time.Millisecond)); d != 10*time.Millisecond {
-		t.Fatalf("late frame caused immediate catch-up: %v", d)
+	if d := p.Delay(epoch.Add(43 * time.Millisecond)); d != 0 {
+		t.Fatalf("over-budget work received an extra interval of sleep: %v", d)
 	}
+	p.Presented(epoch.Add(44 * time.Millisecond))
+	if d := p.Delay(epoch.Add(44 * time.Millisecond)); d != 9*time.Millisecond {
+		t.Fatalf("missed deadlines caused a catch-up burst: %v", d)
+	}
+	// A late wake-up starts a fresh budget rather than shortening it to an old
+	// periodic target. Event processing and scheduler stalls count here too.
 	if d := p.Delay(epoch.Add(54 * time.Millisecond)); d != 0 {
 		t.Fatalf("overdue frame returned negative/nonzero delay: %v", d)
 	}
 	p.Presented(epoch.Add(55 * time.Millisecond))
-	if d := p.Delay(epoch.Add(55 * time.Millisecond)); d != 8*time.Millisecond {
-		t.Fatalf("new cadence incorrect: %v", d)
+	if d := p.Delay(epoch.Add(55 * time.Millisecond)); d != 9*time.Millisecond {
+		t.Fatalf("late wake-up retained the old cadence: %v", d)
+	}
+}
+
+func TestCompatibilityCapIncludesSlowTransferWork(t *testing.T) {
+	interval := time.Second / 30
+	for _, work := range []time.Duration{
+		time.Millisecond, 20 * time.Millisecond, interval - time.Nanosecond,
+		interval, interval + time.Nanosecond, 34 * time.Millisecond,
+		60 * time.Millisecond, 67 * time.Millisecond, 100 * time.Millisecond,
+	} {
+		t.Run(work.String(), func(t *testing.T) {
+			p := New(interval, false)
+			now := epoch
+			var lastStart time.Time
+			for frame := 0; frame < 300; frame++ {
+				now = now.Add(p.Delay(now))
+				if delay := p.Delay(now); delay != 0 {
+					t.Fatalf("deadline still not ready: %v", delay)
+				}
+				if frame > 0 && now.Sub(lastStart) != max(interval, work) {
+					t.Fatalf("frame %d: start interval %v, want %v", frame, now.Sub(lastStart), max(interval, work))
+				}
+				lastStart = now
+				now = now.Add(work)
+				p.Presented(now)
+			}
+		})
+	}
+}
+
+func TestIrregularWorkAndWakeupsKeepCapWithoutExtraSleep(t *testing.T) {
+	interval := time.Second / 30
+	p := New(interval, false)
+	now := epoch
+	// Deterministic transfer spikes, brief frames and late message-loop wakes.
+	workloads := []time.Duration{time.Millisecond, 67 * time.Millisecond, 2 * time.Millisecond, 600 * time.Millisecond, 3 * time.Millisecond}
+	wakeups := []time.Duration{0, 0, 17 * time.Millisecond, 0, 50 * time.Millisecond}
+	var lastStart time.Time
+	for frame := 0; frame < 1000; frame++ {
+		now = now.Add(p.Delay(now)).Add(wakeups[frame%len(wakeups)])
+		if delay := p.Delay(now); delay != 0 {
+			t.Fatalf("frame %d: late wake is not eligible: %v", frame, delay)
+		}
+		if frame > 0 && now.Sub(lastStart) < interval {
+			t.Fatalf("frame %d: catch-up burst exceeded cap: %v", frame, now.Sub(lastStart))
+		}
+		lastStart = now
+		work := workloads[frame%len(workloads)]
+		now = now.Add(work)
+		p.Presented(now)
+		if delay := p.Delay(now); delay != max(time.Duration(0), interval-work) {
+			t.Fatalf("frame %d: work %v followed by delay %v", frame, work, delay)
+		}
 	}
 }
 
@@ -154,5 +213,29 @@ func TestInvalidIntervalUsesDefault(t *testing.T) {
 		if d := p.Delay(epoch); d != defaultInterval {
 			t.Fatalf("interval %v produced %v", interval, d)
 		}
+	}
+}
+
+// These benchmarks advance a virtual clock: simulated-fps describes scheduling
+// policy under a fixed frame cost, not measured WGC/driver/game throughput.
+func BenchmarkCompatibilityTimer(b *testing.B) {
+	for _, work := range []time.Duration{20 * time.Millisecond, 34 * time.Millisecond, 67 * time.Millisecond} {
+		b.Run(work.String(), func(b *testing.B) {
+			var elapsed time.Duration
+			for n := 0; n < b.N; n++ {
+				p := New(time.Second/30, false)
+				now := epoch
+				for frame := 0; frame < 301; frame++ {
+					now = now.Add(p.Delay(now))
+					p.Delay(now)
+					if frame == 300 {
+						elapsed = now.Sub(epoch)
+					}
+					now = now.Add(work)
+					p.Presented(now)
+				}
+			}
+			b.ReportMetric(300/elapsed.Seconds(), "simulated-fps")
+		})
 	}
 }

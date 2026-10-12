@@ -9,20 +9,31 @@
    installer. For a portable copy, extract the entire ZIP and open `lumatape.exe`;
    keep the `engine` folder and all its files beside it.
 2. Open a game in windowed or borderless mode.
-3. Click the LumaTape tray icon, next to the Windows clock, and select the window
-   under "Game". If Windows hides the icon, open the tray's overflow menu.
-4. Choose an effect under "Effect", select "Turn on", and return to the game.
+3. Click the LumaTape tray icon, next to the Windows clock, and open "Settings…".
+   If Windows hides the icon, open the tray's overflow menu.
+4. Choose your game window and effect, select "Turn on", and return to the game.
    Try VHS Tape first. You can change effects while playing; your choice takes effect immediately.
 
+For a fullscreen effect, select "Borderless fullscreen" in the game. LumaTape
+processes the selected window's contents: when it fills the screen, so does the
+effect. A small window is not enlarged automatically; whole-desktop capture is
+not supported.
+
 "Turn off" removes the effect and restores window or display-mode changes
-made by LumaTape. "Quit" closes the application. All settings are in the tray;
-there is no separate settings window.
+made by LumaTape. "Quit" closes the application. Quick actions remain in the tray;
+a separate window brings together game, effect and format choices with performance
+readings. The first launch creates only the tray; launching again opens settings
+in the existing instance. Closing settings normally releases that window without
+turning the effect off. An unconfirmed Windows resolution change is the exception:
+closing settings cancels it and turns the effect off.
 
 LumaTape is free and open source.
 
 Requires Windows 10 version 2004 or later, x64, OpenGL 3.3, and SDR.
-WebView2 and development tools are not required. HDR and exclusive fullscreen
-are unsupported.
+Settings use Microsoft Edge WebView2 Runtime. The installer includes a bootstrapper
+that downloads and installs the runtime if needed; portable ZIP users need it
+installed separately. Development tools are not required. HDR and exclusive
+fullscreen are unsupported.
 
 This is a preview. It has been tested in Windows through Parallels;
 physical GPU support and real-game compatibility still need validation.
@@ -61,7 +72,10 @@ only for a recognized driver incompatibility with texture sharing between Direct
 and OpenGL (GPU interop).
 Having the capture DLL is not enough: the driver needs `WGL_NV_DX_interop2`.
 Other capture errors do not trigger a switch. Saved manual choices stay unchanged.
-CPU processing is capped at 30 FPS. Lightweight supports only overlay effects;
+CPU processing is capped at 30 FPS; this is a limit, not a guaranteed rate.
+Settings distinguish "New frames" from "Presentation": showing the same image
+again does not count as a new frame. On ultrawide displays, capture area also
+affects the workload; a smaller window reduces transfer volume. Lightweight supports only overlay effects;
 full color processing requires Full mode.
 
 ### Screen shape
@@ -82,26 +96,45 @@ choice of "Allow arbitrary distortion". System-cursor projection is disabled for
 a custom `warp`; an author's `preserve` declaration alone does not prove that
 clicks align.
 
+If part of the window extends beyond the displays, the curved effect with cursor
+projection pauses: the normal Windows cursor cannot reach the offscreen part.
+Move the window fully on screen to resume the effect without turning it on again.
+
 ### Scaling and older games' aspect ratios
 
 Fit preserves the whole frame; Crop
 fills the area by trimming edges; Stretch stretches the image. Usually keep the
-source aspect ratio. DAR sets the display aspect ratio. A value of 4:3 is useful,
-for example, for a 320×200 frame designed for an older display's non-square pixels.
-1280×1024 is 5:4, not 4:3.
-Fitting 16:9 inside a 4:3 area still displays a 16:9 image.
+source aspect ratio. "Legacy game aspect ratio" (DAR) corrects image proportions,
+for example a 320×200 frame intended for a 4:3 display with non-square pixels.
+It does not resize the window or change how the game renders. It cannot make any
+game render in 4:3: applying it to a correct 16:9 image squeezes the image, turning
+circles into ovals. 1280×1024 is 5:4, not 4:3. Fitting 16:9 inside a 4:3 area still
+displays a 16:9 image.
 
 ### 4:3 format
 
-Set the format in the game itself. Masking and
-client-window resizing were removed from the menu: masking only covered part of
-the frame, and resizing caused recurring side-field flicker in Parallels. Older
-JSON/CLI profiles remain readable. Their active state is shown as "from profile";
-"Original aspect ratio" or "Turn off" restores LumaTape's own changes.
+Start with "Make window 4:3" in settings. LumaTape resizes the selected window's
+client area once, fitting it into the monitor's work area with room for borders,
+the title bar and DPI scaling. On a wide display, the window is centered; Windows
+resolution stays unchanged. The result is verified, and a failed change is rolled
+back. This method does not mask the edges or add artificial bars to the image.
+It resizes the window itself: a borderless fullscreen window will also become
+smaller and stop filling a widescreen display.
+
+The game decides how to render into its resized window. If it stretches a wide
+image, select 4:3 in the game's settings too. If the game changes the size back,
+LumaTape reports that the format is no longer applied; use the same button to
+retry. It does not repeatedly resize against the game. "Restore original format"
+restores LumaTape's changes while retaining the effect's enabled state; "Turn off"
+also disables the effect. Later user or game window changes are not overwritten.
+Masking remains only for compatibility with older JSON/CLI profiles.
 
 "Windows resolution…" uses only modes enumerated by Windows, tests the candidate
-and applies it temporarily without writing to the registry. "Keep display mode"
-is available for 15 seconds after application. A separate watchdog restores the
+and applies it temporarily without writing to the registry. Settings open before
+the switch and immediately show a countdown with "Keep" and "Revert". Confirmation
+is required within 15 seconds. "Revert" retains the effect's enabled state if
+restoration succeeds; closing the window while confirmation is pending performs
+an emergency off. A separate watchdog restores the
 mode on timeout, exit or main-process crash. A later detected user change is not
 overwritten. Win32 has no atomic compare-and-set: a short race or a change and
 reversal between polls cannot be ruled out. The watchdog does not cover both
@@ -136,7 +169,7 @@ translated. Technical OS/driver messages may remain in their original language.
 Settings and logs: `%APPDATA%\LumaTape`. Shader library:
 `%LOCALAPPDATA%\LumaTape\Shaders`. Saved JSON/CLI profiles continue to work:
 intensity 0 bypasses the filter and shape while retaining independent 4:3.
-The tray uses 100% when an effect is explicitly selected or enabled; simply
+The tray and settings use 100% when an effect is explicitly selected or enabled; simply
 reading an older profile does not overwrite its values.
 
 ## Diagnostics and limitations
@@ -150,20 +183,30 @@ queue and continuous rotation: the current file and three backups, each up to
 4 MiB. Dropped events and write failures are counted.
 
 Measurements separate CPU command submission, GPU shader time, CPU frame transfer
-and captured-frame age. None of these measures total input-to-display latency.
-`null` means a
+and captured-frame age. Newly captured image rate and presentation rate are
+measured separately; neither is the game's internal FPS or monitor refresh rate.
+Measurements carry an observation time and validity state. Current rates are
+unavailable while paused; a previous reading, when available, is stored separately
+with its timestamp. None of these measures total input-to-display latency. `null` means a
 measurement is unavailable. Saving a diagnostic PNG synchronizes the GPU and is
 not suitable for performance measurement.
 
 Full works in SDR and rejects active HDR/Advanced Color. Exclusive fullscreen,
 protected windows/DRM, anti-cheat, whole-monitor Full capture and compatibility
 with every game are not claimed. Windows may display a capture-indicator border.
-During movement, resizing, focus loss or stale frames, the effect may temporarily
-hide and reveal the original; returning requires a fresh frame. WGC may stop
-sending frames for a completely static window.
+During movement, resizing or focus loss, the effect may temporarily hide and
+reveal the original. WGC may stop sending frames for a static image: an already
+validated frame can be reused only after source, device and geometry checks,
+with no CPU copy pending. A slow transfer is not treated as a static image.
+After a capture failure, presentation resumes only after a series of fresh
+frames. If the failure quickly recurs, the effect stays paused; turn it off and
+on to retry. This does not establish a fix on any particular physical GPU;
+that runtime check is still needed.
 
 The system cursor is projected only for the known built-in geometry. XOR-inverting
-cursors are unsupported, and animated system-cursor timing is not reproduced.
+pixels use a white shape with a black outline, preserving visibility and the
+hotspot without reproducing background inversion. Animated system-cursor timing
+is not reproduced.
 A cursor drawn by a game stays part of its frame. A separate watchdog restores
 the normal cursor after failure or more than 500 ms without frames. If the engine
 fully hangs, the frozen image itself may remain until the engine resumes or
@@ -175,7 +218,7 @@ yet been confirmed by physical observation.
 | Task | Document |
 |---|---|
 | Write a shader using the v1 contract | [Specification](SHADER_SPEC.en.md), [examples](../examples/shaders) |
-| Build the tray application | [Tauri host](../desktop/src-tauri/README.en.md) |
+| Build the application | [Tauri host](../desktop/src-tauri/README.en.md) |
 | Prepare a signed update | [Updates](UPDATES.en.md) |
 | Understand capture and rendering | [Architecture](ARCHITECTURE.en.md), [capture library](../native/capture/README.en.md) |
 | Validate a game, geometry and recovery | [Windows protocol](WINDOWS_VALIDATION.en.md), [Parallels](PARALLELS_SMOKE.en.md) |
@@ -185,8 +228,9 @@ yet been confirmed by physical observation.
 
 ## Building and validation
 
-The current application uses a native Tauri tray. The repository retains React
-prototypes and a standalone Go/Win32 interface, but neither is part of the current UI.
+The current application uses a native Tauri tray and local HTML/CSS/JavaScript
+settings loaded on demand. The repository retains React prototypes and a
+standalone Go/Win32 interface, but neither is part of the current UI.
 
 Build Windows x64 with locked dependencies. Requirements: Go ≥1.23, Rust,
 Node/npm for the Tauri CLI, Python ≥3.11, Git, CMake ≥3.24 and Visual Studio 2022
@@ -217,9 +261,10 @@ and local startup.
 
 ```sh
 sh scripts/check.sh                        # Go unit/race/vet + Windows cross-build
-sh scripts/validate-shaders-macos.sh        # встроенные шейдеры, Mac CGL/OpenGL
-sh scripts/validate-custom-shaders-macos.sh # пользовательские шейдеры, Mac CGL/OpenGL
+sh scripts/validate-shaders-macos.sh        # built-in shaders, Mac CGL/OpenGL
+sh scripts/validate-custom-shaders-macos.sh # custom shaders, Mac CGL/OpenGL
 cd desktop && npm run test:host            # Rust host/menu/updater
+npm run test:settings                      # current settings-window model
 ```
 
 These are separate validation layers: portable logic, Mac CGL, Windows CPU
@@ -231,10 +276,11 @@ scene without a border; `--color-field` helps assess noise and chroma.
 
 The separate `scripts/build-windows.ps1` builds the legacy/CLI Go application with
 Win32 UI, not the main Tauri host. Its `--snapshot` is for diagnostics, not gaming.
-Tests of the retained `desktop/ui` and prototypes do not qualify the current tray.
+Tests of the retained `desktop/ui` and prototypes do not validate the current tray or settings.
 
 Portable settings and geometry are in `internal/config`, `internal/geometry` and
 `internal/display`; shaders are in `internal/render/shaders`, and the platform
 layer is in `internal/platform`. The tray model is
 `desktop/src-tauri/src/tray_model.rs`, dispatch is in `tray.rs`, and native dialogs
-are in `native_dialog.rs`.
+are in `native_dialog.rs`. The settings window is in `settings.rs` and
+`desktop/tray-assets/`.

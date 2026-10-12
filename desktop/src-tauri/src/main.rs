@@ -1,11 +1,13 @@
 #![cfg_attr(not(debug_assertions), windows_subsystem = "windows")]
 mod autostart;
+mod display_change;
 mod engine;
 mod i18n;
 mod lifecycle;
 mod links;
 mod native_dialog;
 mod protocol;
+mod settings;
 mod testcard;
 mod tray;
 mod tray_model;
@@ -222,6 +224,10 @@ fn main() {
                 .build(),
         );
     let app = builder
+        .invoke_handler(tauri::generate_handler![
+            settings::settings_snapshot,
+            settings::settings_action
+        ])
         .setup(|app| {
             let root = app.path().resource_dir()?.join("engine");
             let engine = Engine::start(app.handle().clone(), &root);

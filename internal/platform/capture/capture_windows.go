@@ -16,6 +16,7 @@ type Library struct {
 	open, acquire, release, close *syscall.Proc
 	openEx, stats                 *syscall.Proc
 	telemetry                     *syscall.Proc
+	idleReuse                     *syscall.Proc
 }
 type Capture struct {
 	library     *Library
@@ -55,6 +56,7 @@ func Load(dir string) (*Library, error) {
 	l.openEx, _ = dll.FindProc("vhs_capture_open_ex")
 	l.stats, _ = dll.FindProc("vhs_capture_get_stats")
 	l.telemetry, _ = dll.FindProc("vhs_capture_get_telemetry_v1")
+	l.idleReuse, _ = dll.FindProc("vhs_capture_can_reuse_idle")
 	if l.telemetry != nil && unsafe.Sizeof(TelemetryV1{}) != 136 {
 		return nil, fmt.Errorf("unsupported capture telemetry layout")
 	}
@@ -92,6 +94,20 @@ func (l *Library) Open(hwnd uintptr, transfer Transfer) (*Capture, error) {
 }
 
 func (c *Capture) Transfer() Transfer { return c.transfer }
+
+// CanReuseIdleFrame is deliberately optional. An old bridge cannot positively
+// validate an aged repeat, so the host retains its conservative age policy.
+// Call while the acquired texture remains owned, before Release.
+func (c *Capture) CanReuseIdleFrame() (bool, error) {
+	if c.library.idleReuse == nil {
+		return false, nil
+	}
+	r, _, _ := c.library.idleReuse.Call(c.handle, uintptr(unsafe.Pointer(&c.errorBuffer[0])), uintptr(len(c.errorBuffer)))
+	if int32(r) < 0 {
+		return false, c.err("capture idle reuse")
+	}
+	return int32(r) == 1, nil
+}
 
 // Telemetry is optional: older bridges, including GPU-only ABI v1, return nil.
 // Diagnostic errors are exposed separately so callers can keep rendering.

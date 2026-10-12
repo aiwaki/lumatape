@@ -149,6 +149,30 @@ func TestApplyConfigCASCompatibilityAndValidation(t *testing.T) {
 	}
 }
 
+func TestExplicitWindowRetryRequiresConfigAndEmergencyPreconditions(t *testing.T) {
+	var barrier emergencyBarrier
+	current := validFullConfig()
+	current.Aspect.Enabled, current.Aspect.Method = true, "window"
+	sequence := barrier.sequence
+	p := control.ApplyPayload{ReapplyWindowFormat: true, ExpectedEmergencySequence: &sequence}
+	if failure := barrier.checkApply(p, current); failure == nil || failure.Code != "invalid_payload" {
+		t.Fatal("explicit retry was accepted without a config precondition")
+	}
+	p.ExpectedConfig, _ = json.Marshal(current)
+	if failure := barrier.checkApply(p, current); failure != nil {
+		t.Fatalf("fresh explicit retry rejected: %+v", failure)
+	}
+	changed := current
+	changed.Enabled = !changed.Enabled
+	if failure := barrier.checkApply(p, changed); failure == nil || failure.Code != "stale_config" {
+		t.Fatal("explicit retry ignored a newer config")
+	}
+	barrier.advance()
+	if failure := barrier.checkApply(p, current); failure == nil || failure.Code != "stale_emergency_sequence" {
+		t.Fatal("delayed retry ignored emergency cancellation")
+	}
+}
+
 func TestPreferenceEditsDoNotResolveAnotherSameTitleSource(t *testing.T) {
 	current := config.Default()
 	current.Target.Kind, current.Target.WindowTitle = "window", "closed game"

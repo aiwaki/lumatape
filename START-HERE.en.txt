@@ -7,13 +7,15 @@ First launch
    keep the engine folder and all its files beside it.
 2. Open a game in windowed or borderless mode.
 3. Left- or right-click the LumaTape icon in the Windows notification
-   area and select the game window under Game.
-4. Choose an effect under Effect, then Turn on, and return to the game.
+   area and open Settings….
+4. Choose the game window and effect, then Turn on, and return to the game.
    Try VHS Tape for a first look.
 
-Everything is controlled from the tray; there is no separate settings window.
+Quick actions remain in the tray. Settings open on demand; launching LumaTape
+again also opens them in the existing instance. Closing settings normally
+leaves the effect running.
 If Windows hides the icon, open the notification area's overflow menu.
-The menu follows the Windows display language at launch:
+The interface follows the Windows display language at launch:
 Russian for RU, English for other languages.
 
 Turning it off
@@ -23,6 +25,14 @@ New-profile shortcuts:
   Ctrl+Shift+9: turn the effect on / off.
   Ctrl+Shift+0: emergency off and restore.
 Existing shortcuts are preserved; see them under Settings → Hotkeys.
+
+Make the window 4:3
+In settings, choose Make window 4:3. LumaTape resizes the window once,
+without changing Windows resolution. If the game stretches the image,
+select 4:3 in the game too. Restore original format restores LumaTape's changes.
+System resolution is a separate option: after switching, choose Keep within
+15 seconds or Revert. Closing settings during confirmation cancels the
+resolution change and turns the effect off.
 
 Try it without a game
 Tools → Test scene opens a test window. Select it under Game.
@@ -46,6 +56,8 @@ Report a problem: https://github.com/aiwaki/lumatape/issues
 Compatibility
 Windows 10 version 2004 or later, x64, OpenGL 3.3, SDR.
 Games must run in windowed or borderless mode; HDR and exclusive fullscreen
-are unsupported. WebView2 and development tools are not required to run the app.
+are unsupported. Settings need Microsoft Edge WebView2 Runtime: the installer
+downloads it if needed; portable ZIP users should install it separately.
+Development tools are not required to run the app.
 This is a preview: it has been tested in Windows through Parallels; physical GPU
 support and real-game compatibility still need validation.

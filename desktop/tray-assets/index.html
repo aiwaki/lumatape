@@ -1,1 +1,40 @@
-<!doctype html><html><head><meta charset="utf-8"><title>LumaTape</title></head><body></body></html>
+<!doctype html>
+<html lang="en">
+<head><meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>LumaTape</title><link rel="stylesheet" href="settings.css"></head>
+<body>
+<header><div><p class="eyebrow">LUMATAPE</p><h1 data-i18n="title">Settings</h1></div><button id="power" class="primary" disabled>…</button></header>
+<main>
+<p id="demo" class="notice" hidden></p>
+<p id="status" role="status" aria-live="polite">…</p>
+<div id="error" role="alert" class="error" hidden></div>
+<section id="confirmation" aria-labelledby="confirm-title" hidden>
+ <h2 id="confirm-title" data-i18n="keepTitle">Keep this resolution?</h2>
+ <p id="countdown"></p><p data-i18n="closeReverts">Closing this window cancels the change and turns the effect off.</p>
+ <div class="actions"><button id="revert" data-i18n="revert">Revert</button><button id="keep" class="primary" data-i18n="keep">Keep</button></div>
+</section>
+<section aria-labelledby="game-title"><h2 id="game-title" data-i18n="game">Game & effect</h2>
+ <label class="field"><span data-i18n="window">Window</span><span class="inline"><select id="source" aria-describedby="source-help" disabled></select><button id="refresh" data-i18n="refresh">Refresh</button></span></label>
+ <p id="source-help" class="hint" data-i18n="fullscreenHelp">For a fullscreen effect, use the game's borderless mode. LumaTape follows the window size.</p>
+ <label class="field"><span data-i18n="effect">Effect</span><select id="effect" disabled></select></label>
+ <label class="field"><span data-i18n="shape">Screen shape</span><select id="shape" disabled></select></label>
+ <div class="actions"><button data-action="import" data-i18n="import">Add effect from file…</button><button data-action="testcard" data-i18n="testcard">Open test scene</button></div>
+</section>
+<section aria-labelledby="format-title"><h2 id="format-title" data-i18n="format">4:3 format</h2>
+ <p data-i18n="windowHelp">Resizes the window itself without changing Windows resolution. A fullscreen window will become smaller too. If the game keeps a wide image, select 4:3 in its settings too.</p>
+ <div class="actions"><button id="window43" class="strong" data-action="model:format:window" data-i18n="window43">Make window 4:3</button><button id="original" data-action="model:format:off" data-i18n="original">Restore window</button></div>
+ <p id="format-status" class="hint"></p>
+ <details><summary data-i18n="windowsResolution">Windows resolution</summary><p data-i18n="systemHelp">Changes the resolution of the game's display. If you do not confirm within 15 seconds, Windows returns to the previous resolution. Stretching and bars depend on your display and graphics driver.</p><button data-action="model:format:system" id="system43" data-i18n="system43">Try 4:3 resolution…</button></details>
+</section>
+<section aria-labelledby="performance-title"><h2 id="performance-title" data-i18n="performance">Performance</h2>
+ <label class="field"><span data-i18n="processing">Processing</span><select id="backend" disabled></select></label>
+ <p id="backend-status" class="hint"></p>
+ <dl class="rates"><div><dt data-i18n="newFrames">New frames</dt><dd id="fresh-fps">—</dd></div><div><dt data-i18n="presentation">Presentation</dt><dd id="present-fps">—</dd></div></dl>
+ <p id="rate-status" class="hint"></p>
+ <button data-action="diagnostics" data-i18n="diagnostics">Copy diagnostics</button>
+</section>
+<details id="advanced"><summary data-i18n="advanced">More settings</summary><div id="extra-settings"></div>
+ <label class="check"><input id="autostart" type="checkbox"><span data-i18n="autostart">Start with Windows</span></label>
+ <div class="actions"><button data-action="hotkey-test" data-i18n="hotkeyTest">Test shortcuts</button><button data-action="updates" data-i18n="updates">Check for updates</button></div>
+</details>
+</main><footer><span id="version">LumaTape</span><button class="link" data-action="about" data-i18n="project">About the project ↗</button></footer>
+<script type="module" src="settings.js"></script></body></html>
