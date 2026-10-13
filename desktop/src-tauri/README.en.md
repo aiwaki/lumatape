@@ -14,6 +14,12 @@ window on demand and destroys it on close. The window requires WebView2 Runtime;
 bootstrapper that downloads the runtime if needed. Portable ZIP users need
 WebView2 installed already.
 
+During an app update (`/UPDATE`), `NSIS_HOOK_PREINSTALL` checks for the runtime
+because the standard Tauri template skips that step. If WebView2 is missing,
+the hook runs the same bundled bootstrapper and checks the result before
+replacing LumaTape files. Downloading the runtime requires internet access;
+a failure stops the update.
+
 React/Vite, `desktop/ui` and former panel sources remain as history; separate
 design experiments are local backups. `dev:ui`, `build:ui` and `desktop/ui` tests
 belong to that archived panel. Current settings live in `desktop/tray-assets/`;
@@ -267,7 +273,7 @@ signing key or credentials from another product are used. WebView2 installation
 through the NSIS bootstrapper is a separate runtime prerequisite, not LumaTape's
 update channel.
 
-A release operator must supply a new LumaTape public key and HTTPS feed at build
+A release operator must supply the dedicated LumaTape public key and HTTPS feed at build
 time using `LUMATAPE_UPDATE_PUBLIC_KEY` and `LUMATAPE_UPDATE_ENDPOINT`, produce
 signed Tauri updater artifacts, and qualify the installed-to-updated Windows
 scenario. `createUpdaterArtifacts` is deliberately false in the unconfigured

@@ -62,3 +62,70 @@
     Pop $R0
   !undef LUMATAPE_GUARD_ID
 !macroend
+
+; Tauri's stock WebView2 section deliberately skips /UPDATE. Versions through
+; 0.3.4 were tray-only, so an existing installation may have no WebView2 runtime.
+; Reuse Tauri's embedded bootstrapper before replacing any application files.
+!macro LumaTapeReadWebViewVersion result
+  !define LUMATAPE_WEBVIEW_READ_ID ${__COUNTER__}
+  ReadRegStr ${result} HKLM "SOFTWARE\WOW6432Node\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
+  StrCmp ${result} "" lumatape_webview_user_${LUMATAPE_WEBVIEW_READ_ID}
+  StrCmp ${result} "0.0.0.0" lumatape_webview_user_${LUMATAPE_WEBVIEW_READ_ID} lumatape_webview_read_done_${LUMATAPE_WEBVIEW_READ_ID}
+  lumatape_webview_user_${LUMATAPE_WEBVIEW_READ_ID}:
+    ReadRegStr ${result} HKCU "SOFTWARE\Microsoft\EdgeUpdate\Clients\${WEBVIEW2APPGUID}" "pv"
+    StrCmp ${result} "0.0.0.0" 0 lumatape_webview_read_done_${LUMATAPE_WEBVIEW_READ_ID}
+    StrCpy ${result} ""
+  lumatape_webview_read_done_${LUMATAPE_WEBVIEW_READ_ID}:
+  !undef LUMATAPE_WEBVIEW_READ_ID
+!macroend
+
+!macro NSIS_HOOK_PREINSTALL
+  !if "${ARCH}" != "x64"
+    !error "Review LumaTape WebView2 registry detection before changing the Windows target."
+  !endif
+  !if "${INSTALLWEBVIEW2MODE}" != "embedBootstrapper"
+    !error "LumaTape updates require Tauri's embedded WebView2 bootstrapper."
+  !endif
+  Push $R0
+  Push $R1
+  StrCmp $UpdateMode 1 0 lumatape_webview_done
+  !insertmacro LumaTapeReadWebViewVersion $R0
+  StrCmp $R0 "" 0 lumatape_webview_done
+
+  InitPluginsDir
+  ClearErrors
+  File "/oname=$PLUGINSDIR\lumatape-webview2-bootstrapper.exe" "${WEBVIEW2BOOTSTRAPPERPATH}"
+  IfErrors lumatape_webview_failed
+  DetailPrint "$(installingWebview2)"
+  ClearErrors
+  ExecWait '"$PLUGINSDIR\lumatape-webview2-bootstrapper.exe" ${WEBVIEW2INSTALLERARGS} /install' $R1
+  IfErrors lumatape_webview_failed
+  StrCmp $R1 0 0 lumatape_webview_failed
+  ; A successful bootstrapper process is not proof that the runtime is present.
+  !insertmacro LumaTapeReadWebViewVersion $R0
+  StrCmp $R0 "" lumatape_webview_failed
+  DetailPrint "$(webview2InstallSuccess)"
+  Goto lumatape_webview_done
+
+  lumatape_webview_failed:
+    System::Call 'kernel32::GetUserDefaultUILanguage() i.R0'
+    IntOp $R0 $R0 & 0x3ff
+    ${If} $R0 == 0x19
+      StrCpy $R1 "Не удалось установить Microsoft Edge WebView2 для окна настроек. Файлы LumaTape ещё не заменены. Проверьте подключение к интернету и повторите установку."
+    ${Else}
+      StrCpy $R1 "Could not install Microsoft Edge WebView2 for settings. LumaTape files have not been replaced. Check your internet connection and retry the installation."
+    ${EndIf}
+    DetailPrint "$R1"
+    IfSilent lumatape_webview_abort
+      MessageBox MB_OK|MB_ICONEXCLAMATION "$R1"
+    lumatape_webview_abort:
+      Pop $R1
+      Pop $R0
+      SetErrorLevel 3
+      Abort
+
+  lumatape_webview_done:
+    Pop $R1
+    Pop $R0
+    ClearErrors
+!macroend

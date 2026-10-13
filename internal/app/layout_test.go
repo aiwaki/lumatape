@@ -74,7 +74,7 @@ func TestGamepadFitDoesNotPretend169Is43(t *testing.T) {
 func TestOSFormatsDoNotAddAnImplicitMaskAfterGameResize(t *testing.T) {
 	for _, method := range []string{"window", "system"} {
 		for _, input := range []string{"mouse-exact", "keyboard-gamepad"} {
-			for _, size := range []geometry.Size{{640, 480}, {1280, 1024}, {1920, 1080}, {3440, 1440}, {5120, 1440}} {
+			for _, size := range []geometry.Size{{W: 640, H: 480}, {W: 1280, H: 1024}, {W: 1920, H: 1080}, {W: 3440, H: 1440}, {W: 5120, H: 1440}} {
 				for _, scale := range []geometry.ScaleMode{geometry.Fit, geometry.Crop, geometry.Stretch} {
 					if input == "mouse-exact" && scale != geometry.Fit {
 						continue

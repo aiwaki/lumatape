@@ -53,6 +53,22 @@ jobs:
       - name: Install Rust toolchain
         shell: pwsh
         run: rustup toolchain install stable --profile minimal
+      - name: Verify NSIS compiler and execute isolated installer hook tests
+        shell: pwsh
+        run: |
+          $nsis = Join-Path ${env:ProgramFiles(x86)} 'NSIS\makensis.exe'
+          if (-not (Get-Command makensis -ErrorAction SilentlyContinue) -and -not (Test-Path -LiteralPath $nsis -PathType Leaf)) {
+            choco install nsis --yes --no-progress
+            if ($LASTEXITCODE -ne 0) { throw "NSIS installation failed: $LASTEXITCODE" }
+          }
+          if (Get-Command makensis -ErrorAction SilentlyContinue) {
+            $nsis = (Get-Command makensis).Source
+          }
+          if (-not (Test-Path -LiteralPath $nsis -PathType Leaf)) { throw 'NSIS compiler is required for Windows installer hook tests.' }
+          & $nsis /VERSION
+          if ($LASTEXITCODE -ne 0) { throw 'NSIS compiler did not run.' }
+          python -m unittest discover -s scripts -p 'test_installer_hooks.py' -v
+          if ($LASTEXITCODE -ne 0) { throw 'Installer hook runtime tests failed.' }
       - name: Read application version and list installed Windows SDKs
         id: build-config
         shell: pwsh
